@@ -32,6 +32,12 @@ export function normalizeWeb3Error(error) {
       'MetaMask가 네트워크에서 연결 해제되었습니다.',
     )
   }
+  if (code === -32002) {
+    return new Web3Error(
+      'WALLET_REQUEST_PENDING',
+      'MetaMask에 이미 처리 중인 요청이 있습니다. 확장 프로그램에서 기존 요청을 완료하거나 취소해 주세요.',
+    )
+  }
   if (code === 'INSUFFICIENT_FUNDS') {
     return new Web3Error(
       'INSUFFICIENT_GAS',

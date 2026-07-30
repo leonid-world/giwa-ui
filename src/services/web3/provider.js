@@ -96,6 +96,47 @@ export async function ensureGiwaNetwork(metaMaskProvider) {
   }
 }
 
+function findExpectedAccount(accounts, expectedAddress) {
+  return accounts?.find(
+    (account) => getAddress(account) === expectedAddress,
+  )
+}
+
+async function requestExpectedAccount(metaMaskProvider, expectedAddress) {
+  let accounts = await metaMaskProvider.request({
+    method: 'eth_requestAccounts',
+  })
+  let expectedAccount = findExpectedAccount(accounts, expectedAddress)
+  if (expectedAccount) return expectedAccount
+
+  try {
+    await metaMaskProvider.request({
+      method: 'wallet_requestPermissions',
+      params: [{ eth_accounts: {} }],
+    })
+    accounts = await metaMaskProvider.request({ method: 'eth_accounts' })
+    expectedAccount = findExpectedAccount(accounts, expectedAddress)
+    if (expectedAccount) return expectedAccount
+  } catch (error) {
+    if (error?.code !== -32601) throw error
+  }
+
+  const activeAddress = accounts?.[0]
+    ? getAddress(accounts[0])
+    : null
+  throw new Web3Error(
+    'WALLET_MISMATCH',
+    `이 채권의 등록 지갑(${expectedAddress})을 MetaMask 계정 선택에서 허용해 주세요.` +
+      (activeAddress
+        ? ` 현재 사이트의 첫 번째 허용 계정은 ${activeAddress}입니다.`
+        : ''),
+    {
+      expectedWalletAddress: expectedAddress,
+      activeWalletAddress: activeAddress,
+    },
+  )
+}
+
 export async function getGiwaSigner(expectedWalletAddress) {
   const metaMaskProvider = getMetaMaskProvider()
   if (!metaMaskProvider) {
@@ -113,23 +154,26 @@ export async function getGiwaSigner(expectedWalletAddress) {
 
   try {
     await ensureGiwaNetwork(metaMaskProvider)
-    const accounts = await metaMaskProvider.request({
-      method: 'eth_requestAccounts',
-    })
-    if (!accounts?.length) {
-      throw new Web3Error(
-        'WALLET_NOT_CONNECTED',
-        'MetaMask 계정을 연결해 주세요.',
-      )
-    }
-
+    const expectedAddress = getAddress(expectedWalletAddress)
+    await requestExpectedAccount(metaMaskProvider, expectedAddress)
     const provider = new BrowserProvider(metaMaskProvider)
-    const signer = await provider.getSigner()
-    const signerAddress = await signer.getAddress()
-    if (getAddress(signerAddress) !== getAddress(expectedWalletAddress)) {
+    if (!(await provider.hasSigner(expectedAddress))) {
       throw new Web3Error(
         'WALLET_MISMATCH',
-        `MetaMask 활성 계정을 이 채권의 등록 지갑(${expectedWalletAddress})으로 전환해 주세요.`,
+        `MetaMask에서 이 채권의 등록 지갑(${expectedAddress})을 사용할 수 없습니다.`,
+        { expectedWalletAddress: expectedAddress },
+      )
+    }
+    const signer = await provider.getSigner(expectedAddress)
+    const signerAddress = await signer.getAddress()
+    if (getAddress(signerAddress) !== expectedAddress) {
+      throw new Web3Error(
+        'WALLET_MISMATCH',
+        `MetaMask signer가 이 채권의 등록 지갑(${expectedAddress})과 일치하지 않습니다.`,
+        {
+          expectedWalletAddress: expectedAddress,
+          activeWalletAddress: getAddress(signerAddress),
+        },
       )
     }
 
