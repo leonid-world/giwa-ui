@@ -1,61 +1,100 @@
-import { BrowserProvider } from 'ethers'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { useAuthStore } from './auth'
+import { ApiError, apiRequest } from '../services/api'
+import { getMetaMaskProvider } from '../services/web3/provider'
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
-
-function getMetaMaskProvider() {
-  const injectedProvider = window.ethereum
-  if (!injectedProvider) return null
-
-  const providers = injectedProvider.providers ?? [injectedProvider]
-  return providers.find((provider) => provider.isMetaMask && !provider.isPhantom) ?? null
+function metaMaskError(error) {
+  if (error?.code === 4001) return new Error('MetaMask 계정 선택이 취소되었습니다.')
+  if (error?.code === 4900) return new Error('MetaMask가 네트워크에서 연결 해제되었습니다.')
+  return new Error(error?.message ?? 'MetaMask 계정을 불러오지 못했습니다.')
 }
 
 export const useWalletStore = defineStore('wallet', () => {
   const walletAddress = ref(null)
+  const pendingWalletAddress = ref(null)
+  const pendingChainId = ref(null)
   const isConnected = computed(() => Boolean(walletAddress.value))
+  const hasPendingWallet = computed(() => Boolean(pendingWalletAddress.value))
 
   async function loadWallet() {
-    const auth = useAuthStore()
-    const response = await fetch(`${API_URL}/wallet/me`, {
-      headers: { Authorization: `Bearer ${auth.token}` },
-    })
-    if (response.status === 404) return
-    if (!response.ok) throw new Error('연결된 지갑 정보를 불러오지 못했습니다.')
-    walletAddress.value = (await response.json()).walletAddress
+    try {
+      const wallet = await apiRequest('/wallet/me')
+      walletAddress.value = wallet.walletAddress
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        walletAddress.value = null
+        return
+      }
+      throw error
+    }
   }
 
-  async function connect() {
+  async function selectAccount() {
     const metaMaskProvider = getMetaMaskProvider()
     if (!metaMaskProvider) {
       throw new Error('MetaMask provider를 찾지 못했습니다. 확장 프로그램을 활성화한 뒤 페이지를 새로고침해 주세요.')
     }
 
-    const accounts = await metaMaskProvider.request({ method: 'eth_requestAccounts' })
-    if (!accounts?.length) throw new Error('MetaMask 계정을 선택해 주세요.')
+    try {
+      try {
+        await metaMaskProvider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        })
+      } catch (error) {
+        if (error?.code !== -32601) throw error
+        await metaMaskProvider.request({ method: 'eth_requestAccounts' })
+      }
 
-    const provider = new BrowserProvider(metaMaskProvider)
-    const network = await provider.getNetwork()
-    const address = accounts[0]
-    const auth = useAuthStore()
-    const response = await fetch(`${API_URL}/wallet/connect`, {
+      const accounts = await metaMaskProvider.request({ method: 'eth_accounts' })
+      if (!accounts?.length) throw new Error('MetaMask 계정을 선택해 주세요.')
+
+      const chainId = await metaMaskProvider.request({ method: 'eth_chainId' })
+      pendingWalletAddress.value = accounts[0]
+      pendingChainId.value = Number(BigInt(chainId))
+      return pendingWalletAddress.value
+    } catch (error) {
+      throw metaMaskError(error)
+    }
+  }
+
+  async function confirmConnection() {
+    if (!pendingWalletAddress.value || !pendingChainId.value) {
+      throw new Error('먼저 연결할 MetaMask 계정을 선택해 주세요.')
+    }
+
+    const wallet = await apiRequest('/wallet/connect', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${auth.token}`,
-        'Content-Type': 'application/json',
+      body: {
+        walletAddress: pendingWalletAddress.value,
+        chainId: pendingChainId.value,
       },
-      body: JSON.stringify({ walletAddress: address, chainId: Number(network.chainId) }),
     })
-    const body = await response.json()
-    if (!response.ok) throw new Error(body.detail ?? body.message ?? '지갑 연결에 실패했습니다.')
-    walletAddress.value = body.walletAddress
+    walletAddress.value = wallet.walletAddress
+    clearPending()
+    return walletAddress.value
+  }
+
+  function clearPending() {
+    pendingWalletAddress.value = null
+    pendingChainId.value = null
   }
 
   function clear() {
     walletAddress.value = null
+    clearPending()
   }
 
-  return { walletAddress, isConnected, loadWallet, connect, clear }
+  return {
+    walletAddress,
+    pendingWalletAddress,
+    pendingChainId,
+    isConnected,
+    hasPendingWallet,
+    loadWallet,
+    selectAccount,
+    confirmConnection,
+    clearPending,
+    clear,
+  }
 })

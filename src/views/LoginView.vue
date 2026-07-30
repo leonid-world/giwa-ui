@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { formatBusinessNumber, normalizeBusinessNumber } from '../utils/businessNumber'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -24,7 +25,7 @@ async function submit() {
         ...credentials,
         userName: userName.value,
         companyName: companyName.value,
-        businessNumber: businessNumber.value,
+        businessNumber: normalizeBusinessNumber(businessNumber.value),
       })
     }
     else await auth.login(credentials)
@@ -39,6 +40,10 @@ async function submit() {
 function toggleMode() {
   isSignup.value = !isSignup.value
   errorMessage.value = ''
+}
+
+function updateBusinessNumber(event) {
+  businessNumber.value = formatBusinessNumber(event.target.value)
 }
 </script>
 
@@ -69,7 +74,17 @@ function toggleMode() {
           </label>
           <label>
             사업자등록번호
-            <input v-model="businessNumber" type="text" inputmode="numeric" required />
+            <input
+              :value="businessNumber"
+              type="text"
+              inputmode="numeric"
+              minlength="12"
+              maxlength="12"
+              pattern="[0-9]{3}-[0-9]{2}-[0-9]{5}"
+              title="사업자등록번호 숫자 10자리를 입력해 주세요."
+              required
+              @input="updateBusinessNumber"
+            />
           </label>
         </template>
         <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>

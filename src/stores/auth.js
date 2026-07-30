@@ -1,7 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+import { apiRequest } from '../services/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('accessToken'))
@@ -9,13 +8,11 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => Boolean(token.value))
 
   async function authenticate(path, credentials) {
-    const response = await fetch(`${API_URL}${path}`, {
+    const body = await apiRequest(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials),
+      auth: false,
+      body: credentials,
     })
-    const body = await response.json()
-    if (!response.ok) throw new Error(body.detail ?? body.message ?? '인증에 실패했습니다.')
 
     token.value = body.accessToken
     user.value = body.user
@@ -30,11 +27,20 @@ export const useAuthStore = defineStore('auth', () => {
     return authenticate('/auth/signup', credentials)
   }
 
+  async function loadUser() {
+    if (!token.value) {
+      user.value = null
+      return null
+    }
+    user.value = await apiRequest('/auth/me')
+    return user.value
+  }
+
   function logout() {
     token.value = null
     user.value = null
     localStorage.removeItem('accessToken')
   }
 
-  return { token, user, isAuthenticated, login, signup, logout }
+  return { token, user, isAuthenticated, login, signup, loadUser, logout }
 })

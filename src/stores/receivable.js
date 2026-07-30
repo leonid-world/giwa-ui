@@ -1,52 +1,66 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import { useAuthStore } from './auth'
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+import { apiRequest } from '../services/api'
 
 export const useReceivableStore = defineStore('receivable', () => {
   const receivables = ref([])
   const selectedReceivable = ref(null)
 
-  function authorizationHeaders() {
-    const auth = useAuthStore()
-    return { Authorization: `Bearer ${auth.token}` }
-  }
-
   async function loadAll() {
-    const response = await fetch(`${API_URL}/receivables`, {
-      headers: authorizationHeaders(),
-    })
-    if (!response.ok) throw new Error('매출채권 목록을 불러오지 못했습니다.')
-    receivables.value = await response.json()
+    receivables.value = await apiRequest('/receivables')
   }
 
   async function loadOne(receivableId) {
-    const response = await fetch(`${API_URL}/receivables/${receivableId}`, {
-      headers: authorizationHeaders(),
-    })
-    if (!response.ok) throw new Error('매출채권 상세 정보를 불러오지 못했습니다.')
-    selectedReceivable.value = await response.json()
+    selectedReceivable.value = await apiRequest(`/receivables/${receivableId}`)
     return selectedReceivable.value
   }
 
+  function clearSelection() {
+    selectedReceivable.value = null
+  }
+
   async function create(payload) {
-    const response = await fetch(`${API_URL}/receivables`, {
+    const body = await apiRequest('/receivables', {
       method: 'POST',
-      headers: {
-        ...authorizationHeaders(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+      body: payload,
     })
-    const body = await response.json()
-    if (!response.ok) {
-      throw new Error(body.detail ?? body.message ?? '매출채권 등록에 실패했습니다.')
-    }
     selectedReceivable.value = body
     await loadAll()
     return body
   }
 
-  return { receivables, selectedReceivable, loadAll, loadOne, create }
+  async function markChainCreated(receivableId, payload) {
+    selectedReceivable.value = await apiRequest(
+      `/receivables/${receivableId}/chain-created`,
+      {
+        method: 'POST',
+        body: payload,
+      },
+    )
+    await loadAll()
+    return selectedReceivable.value
+  }
+
+  async function markVerified(receivableId, payload) {
+    selectedReceivable.value = await apiRequest(
+      `/receivables/${receivableId}/verified`,
+      {
+        method: 'POST',
+        body: payload,
+      },
+    )
+    await loadAll()
+    return selectedReceivable.value
+  }
+
+  return {
+    receivables,
+    selectedReceivable,
+    loadAll,
+    loadOne,
+    clearSelection,
+    create,
+    markChainCreated,
+    markVerified,
+  }
 })
