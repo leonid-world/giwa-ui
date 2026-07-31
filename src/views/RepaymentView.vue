@@ -536,7 +536,7 @@ function shortAddress(value) {
       </div>
       <nav>
         <button type="button" class="secondary" @click="router.push({ name: 'dashboard' })">
-          Dashboard
+          대시보드
         </button>
         <button type="button" class="secondary" @click="router.push({ name: 'receivables' })">
           매출채권 관리
@@ -571,6 +571,7 @@ function shortAddress(value) {
           :class="{
             selected: sameId(receivable.receivableId, selectedReceivable?.receivableId),
           }"
+          :aria-pressed="sameId(receivable.receivableId, selectedReceivable?.receivableId)"
           @click="selectObligation(receivable.receivableId)"
         >
           <span>#{{ receivable.receivableId }} · NFT #{{ receivable.tokenId }}</span>
@@ -735,19 +736,21 @@ function shortAddress(value) {
 
 <style scoped>
 .repayment-page {
-  min-height: 100vh;
+  min-height: 100%;
   padding: 32px;
-  background: #f5f8f6;
+  background: #f4f8f5;
   color: #15352b;
 }
+
 .page-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  max-width: 1280px;
+  max-width: 1180px;
   margin: 0 auto 24px;
   gap: 24px;
 }
+
 .eyebrow {
   margin: 0;
   color: #0b7654;
@@ -755,120 +758,211 @@ function shortAddress(value) {
   font-weight: 800;
   letter-spacing: 0.1em;
 }
+
 h1 {
-  margin: 6px 0;
+  margin: 6px 0 8px;
   font-size: 32px;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
 }
+
 h2,
 h3,
 p {
   margin-top: 0;
 }
-.page-header p {
-  color: #62736b;
+
+h2 {
+  color: #15352b;
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 1.35;
 }
+
+h3 {
+  color: #15352b;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.page-header p {
+  max-width: 720px;
+  margin-bottom: 0;
+  color: #62736b;
+  line-height: 1.6;
+}
+
 nav {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
+
 button {
+  min-height: 42px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   padding: 11px 14px;
   background: #0b7654;
   color: white;
   cursor: pointer;
-  font: inherit;
   font-weight: 700;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    color 0.16s ease;
 }
+
+button:not(.opportunity-card):hover:not(:disabled) {
+  background: #075f44;
+}
+
 button.secondary {
   border: 1px solid #bdcbc4;
-  background: white;
+  background: #ffffff;
   color: #315548;
 }
+
+button.secondary:hover:not(:disabled) {
+  border-color: #8fb3a3;
+  background: #f1f7f4;
+}
+
+button:focus-visible {
+  outline: 3px solid rgba(11, 118, 84, 0.28);
+  outline-offset: 2px;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
+
 .notice {
-  max-width: 1280px;
+  max-width: 1180px;
   margin: 0 auto 14px;
   padding: 13px 16px;
-  border-radius: 10px;
+  border-radius: 9px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.55;
 }
+
 .notice.error {
   border: 1px solid #efb4b4;
   background: #fff2f2;
   color: #941f1f;
 }
+
 .notice.success {
   border: 1px solid #a8d6c4;
   background: #edfaf4;
   color: #086245;
 }
+
 .notice.progress {
   border: 1px solid #b8d4c8;
   background: #eff7f3;
   color: #315548;
 }
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
-  max-width: 1280px;
+  align-items: start;
+  max-width: 1180px;
   min-height: 620px;
   margin: 0 auto;
-  gap: 18px;
+  gap: 20px;
 }
+
 .opportunity-panel,
 .detail-panel {
-  border: 1px solid #dfe5e1;
+  border: 1px solid #dce5e0;
   border-radius: 16px;
-  background: white;
   padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(24, 62, 48, 0.045);
 }
+
 .opportunity-panel {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+
+.opportunity-panel h2 {
+  margin-bottom: 6px;
+}
+
 .opportunity-card {
   display: grid;
   width: 100%;
   margin: 0;
   gap: 5px;
+  padding: 14px 16px;
   border: 1px solid #dfe5e1;
-  background: white;
+  border-radius: 11px;
+  background: #ffffff;
   color: #315548;
+  line-height: 1.45;
   text-align: left;
 }
+
+.opportunity-card:hover:not(:disabled):not(.selected) {
+  border-color: #a8bdb3;
+  background: #f8fbf9;
+}
+
 .opportunity-card.selected {
   border-color: #0b7654;
   background: #eaf6f0;
+  box-shadow:
+    0 0 0 1px rgba(11, 118, 84, 0.14),
+    inset 3px 0 0 #0b7654;
 }
+
 .opportunity-card strong {
   color: #15352b;
+  font-weight: 750;
 }
+
+.opportunity-card > span:first-child {
+  color: #62736b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .opportunity-card small {
   color: #6a7c74;
 }
+
 .empty {
   color: #77877f;
+  line-height: 1.6;
 }
+
 .detail-panel {
   min-width: 0;
 }
+
 .detail-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 22px;
 }
+
 .detail-heading h2 {
   margin: 6px 0 0;
 }
+
 .status {
   display: inline-block;
   border-radius: 999px;
@@ -878,143 +972,280 @@ button:disabled {
   font-size: 12px;
   font-weight: 800;
 }
+
 .wallet-label {
+  max-width: 100%;
+  overflow: hidden;
   border-radius: 999px;
   padding: 7px 10px;
   background: #f1f5f3;
   color: #52675e;
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
 .terms {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 24px;
+  column-gap: 32px;
+  row-gap: 0;
   margin: 0 0 24px;
 }
+
 .terms div {
   min-width: 0;
   border-bottom: 1px solid #edf1ee;
-  padding: 9px 0;
+  padding: 11px 0;
 }
+
 .terms dt {
   color: #77877f;
   font-size: 13px;
+  font-weight: 650;
 }
+
 .terms dd {
   margin: 5px 0 0;
   font-weight: 700;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
+
 .hash {
   overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
 }
+
 .funding-steps,
 .recovery-card {
   display: grid;
   gap: 14px;
 }
+
 .balance-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
+
 .balance-grid div {
   display: grid;
   gap: 6px;
+  min-height: 82px;
+  border: 1px solid #e3ebe7;
   border-radius: 10px;
   padding: 14px;
   background: #f4f8f5;
 }
+
 .balance-grid span,
 .step-card > span {
   color: #62736b;
   font-size: 12px;
   font-weight: 800;
 }
+
+.balance-grid strong {
+  color: #15352b;
+  font-size: 17px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
 .step-card,
 .journal-gate,
 .recovery-card,
 .completed-card {
+  display: grid;
+  gap: 8px;
   border: 1px solid #d9e3de;
   border-radius: 12px;
   padding: 18px;
+  line-height: 1.6;
 }
+
+.step-card h3,
+.step-card p,
+.journal-gate p,
+.recovery-card h3,
+.recovery-card p,
+.completed-card h3,
+.completed-card p {
+  margin: 0;
+}
+
 .step-card.complete {
   border-color: #91cdb5;
   background: #effaf5;
 }
+
+.step-card.complete button:disabled {
+  cursor: default;
+  background: #d9eee4;
+  color: #0b6548;
+  opacity: 1;
+}
+
 .step-card.enabled {
   border-color: #0b7654;
+  background: #fbfefc;
+  box-shadow: 0 0 0 1px rgba(11, 118, 84, 0.1);
 }
+
 .step-card button,
 .journal-gate button,
 .recovery-card button {
-  margin-top: 8px;
+  width: fit-content;
+  margin-top: 4px;
 }
+
 .step-card p,
 .journal-gate p,
 .recovery-card p {
   color: #62736b;
 }
+
 .journal-gate {
   background: #f4f8f5;
 }
+
 .journal-gate.blocked {
   border-color: #efb4b4;
   background: #fff4f4;
 }
+
 .recovery-card {
   border-color: #d5c27a;
   background: #fffbea;
 }
+
 .completed-card {
   border-color: #91cdb5;
   background: #effaf5;
 }
+
 .completed-card p {
-  margin-bottom: 0;
   color: #315548;
 }
+
 .recipient-notice {
+  margin: 0;
+  border: 1px solid #c7ddd2;
   border-radius: 8px;
   padding: 12px;
   background: #eff7f3;
   color: #315548;
+  line-height: 1.55;
 }
+
 .insufficient {
+  margin: 0;
+  border: 1px solid #efc0c0;
   border-radius: 8px;
   padding: 12px;
   background: #fff2f2;
   color: #941f1f;
+  line-height: 1.55;
 }
+
 .explorer-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
   margin-top: 18px;
+  padding: 7px 11px;
+  border: 1px solid #0b7654;
+  border-radius: 8px;
+  background: #ffffff;
   color: #0b7654;
   font-weight: 700;
+  text-decoration: none;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
+
+.explorer-link:hover {
+  border-color: #075f44;
+  background: #eaf6ef;
+  color: #075f44;
+}
+
+.explorer-link:focus-visible {
+  outline: 3px solid rgba(11, 118, 84, 0.24);
+  outline-offset: 2px;
+}
+
 .empty-detail {
   display: grid;
+  min-height: 320px;
   align-content: center;
   justify-items: center;
   color: #62736b;
   text-align: center;
 }
+
 @media (max-width: 900px) {
   .repayment-page {
     padding: 20px;
   }
+
   .page-header {
     flex-direction: column;
   }
+
   nav {
     justify-content: flex-start;
   }
+
   .workspace {
     grid-template-columns: 1fr;
+    min-height: 0;
   }
+
+  .detail-heading {
+    align-items: flex-start;
+  }
+
   .terms,
   .balance-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .repayment-page {
+    padding: 20px 16px 32px;
+  }
+
+  h1 {
+    font-size: 28px;
+  }
+
+  nav {
+    width: 100%;
+  }
+
+  nav button {
+    flex: 1 1 140px;
+  }
+
+  .opportunity-panel,
+  .detail-panel {
+    padding: 18px;
+  }
+
+  .wallet-label {
+    width: 100%;
+  }
+
+  .step-card button,
+  .journal-gate button,
+  .recovery-card button {
+    width: 100%;
   }
 }
 </style>

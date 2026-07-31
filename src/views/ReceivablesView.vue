@@ -1,10 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  addressExplorerUrl,
-  transactionExplorerUrl,
-} from '../contracts/addresses'
+import { addressExplorerUrl, transactionExplorerUrl } from '../contracts/addresses'
 import {
   createReceivableOnchain,
   resumeReceivableTransaction,
@@ -15,10 +12,7 @@ import { getReceivableBlockchainTransactions } from '../services/blockchainTrans
 import { useAuthStore } from '../stores/auth'
 import { useReceivableStore } from '../stores/receivable'
 import { useWalletStore } from '../stores/wallet'
-import {
-  formatBusinessNumber,
-  normalizeBusinessNumber,
-} from '../utils/businessNumber'
+import { formatBusinessNumber, normalizeBusinessNumber } from '../utils/businessNumber'
 
 const PENDING_SYNC_STORAGE_KEY = 'receivablePendingBlockchainSync'
 const TOKENIZE_TRANSACTION_TYPE = 'TOKENIZE_RECEIVABLE'
@@ -50,43 +44,30 @@ const form = reactive({
   description: '',
 })
 
-const selectedReceivable = computed(
-  () => receivableStore.selectedReceivable,
-)
+const selectedReceivable = computed(() => receivableStore.selectedReceivable)
 const currentCompanyId = computed(() => authStore.user?.companyId)
 const isSeller = computed(
   () =>
     selectedReceivable.value &&
-    sameId(
-      currentCompanyId.value,
-      selectedReceivable.value.sellerCompanyId,
-    ),
+    sameId(currentCompanyId.value, selectedReceivable.value.sellerCompanyId),
 )
 const isBuyer = computed(
   () =>
     selectedReceivable.value &&
-    sameId(
-      currentCompanyId.value,
-      selectedReceivable.value.buyerCompanyId,
-    ),
+    sameId(currentCompanyId.value, selectedReceivable.value.buyerCompanyId),
 )
 const buyerReviewRequired = computed(
-  () =>
-    Boolean(isBuyer.value) &&
-    selectedReceivable.value.status === 'CREATED',
+  () => Boolean(isBuyer.value) && selectedReceivable.value.status === 'CREATED',
 )
-const hasCompleteChainMetadata = computed(
-  () =>
-    Boolean(
-      selectedReceivable.value?.onchainReceivableId &&
-        selectedReceivable.value?.contractAddress &&
-        selectedReceivable.value?.createTxHash,
-    ),
+const hasCompleteChainMetadata = computed(() =>
+  Boolean(
+    selectedReceivable.value?.onchainReceivableId &&
+    selectedReceivable.value?.contractAddress &&
+    selectedReceivable.value?.createTxHash,
+  ),
 )
 const hasCompleteVerificationMetadata = computed(
-  () =>
-    hasCompleteChainMetadata.value &&
-    Boolean(selectedReceivable.value?.verifyTxHash),
+  () => hasCompleteChainMetadata.value && Boolean(selectedReceivable.value?.verifyTxHash),
 )
 const canCreateOnchain = computed(
   () =>
@@ -96,10 +77,7 @@ const canCreateOnchain = computed(
     !selectedReceivable.value.onchainReceivableId,
 )
 const canVerify = computed(
-  () =>
-    !pendingSync.value &&
-    buyerReviewRequired.value &&
-    hasCompleteChainMetadata.value,
+  () => !pendingSync.value && buyerReviewRequired.value && hasCompleteChainMetadata.value,
 )
 const canSubmitVerification = computed(
   () =>
@@ -114,47 +92,34 @@ const isTokenizationCandidate = computed(
     selectedReceivable.value?.status === 'VERIFIED' &&
     hasCompleteVerificationMetadata.value,
 )
-const isTokenizationJournalChecking = computed(
-  () => tokenizationJournalStatus.value === 'checking',
-)
+const isTokenizationJournalChecking = computed(() => tokenizationJournalStatus.value === 'checking')
 const shouldShowTokenizationJournalGate = computed(
-  () =>
-    !pendingSync.value &&
-    isTokenizationCandidate.value &&
-    !canTokenize.value,
+  () => !pendingSync.value && isTokenizationCandidate.value && !canTokenize.value,
 )
 const canTokenize = computed(
   () =>
     !pendingSync.value &&
     isTokenizationCandidate.value &&
     tokenizationJournalStatus.value === 'clear' &&
-    sameId(
-      tokenizationJournalReceivableId.value,
-      selectedReceivable.value?.receivableId,
-    ),
+    sameId(tokenizationJournalReceivableId.value, selectedReceivable.value?.receivableId),
 )
-const buyerVerificationButtonText = computed(
-  () => {
-    if (isRefreshing.value) return '최신 상태 확인 중...'
-    if (isChainActionRunning.value) return 'GIWA 확인 중...'
-    if (pendingSync.value) return '기존 블록체인 작업 처리 중'
-    if (!hasCompleteChainMetadata.value) {
-      return 'Seller 온체인 생성 대기 중'
-    }
-    if (!buyerAttestationAccepted.value) {
-      return '채권 내용 확인 후 동의해 주세요'
-    }
-    return '확인 내용을 MetaMask로 서명'
-  },
-)
+const buyerVerificationButtonText = computed(() => {
+  if (isRefreshing.value) return '최신 상태 확인 중...'
+  if (isChainActionRunning.value) return 'GIWA 확인 중...'
+  if (pendingSync.value) return '기존 블록체인 작업 처리 중'
+  if (!hasCompleteChainMetadata.value) {
+    return 'Seller 온체인 생성 대기 중'
+  }
+  if (!buyerAttestationAccepted.value) {
+    return '채권 내용 확인 후 동의해 주세요'
+  }
+  return '확인 내용을 MetaMask로 서명'
+})
 const pendingSyncForSelected = computed(
   () =>
     pendingSync.value &&
     selectedReceivable.value &&
-    sameId(
-      pendingSync.value.receivableId,
-      selectedReceivable.value.receivableId,
-    ),
+    sameId(pendingSync.value.receivableId, selectedReceivable.value.receivableId),
 )
 
 onMounted(loadPage)
@@ -164,17 +129,9 @@ async function loadPage() {
   resetTokenizationJournalCheck()
   buyerAttestationAccepted.value = false
   try {
-    await Promise.all([
-      authStore.loadUser(),
-      walletStore.loadWallet(),
-      receivableStore.loadAll(),
-    ])
-    pendingSync.value = readPendingSynchronization(
-      currentCompanyId.value,
-    )
-    const recoveryRouteName = externalRecoveryRouteName(
-      pendingSync.value,
-    )
+    await Promise.all([authStore.loadUser(), walletStore.loadWallet(), receivableStore.loadAll()])
+    pendingSync.value = readPendingSynchronization(currentCompanyId.value)
+    const recoveryRouteName = externalRecoveryRouteName(pendingSync.value)
     if (recoveryRouteName) {
       await router.replace({ name: recoveryRouteName })
       return
@@ -185,9 +142,7 @@ async function loadPage() {
     } else if (receivableStore.receivables.length) {
       const initialReceivable =
         receivableStore.receivables.find(
-          (receivable) =>
-            isBuyerFor(receivable) &&
-            receivable.status === 'FUNDED',
+          (receivable) => isBuyerFor(receivable) && receivable.status === 'FUNDED',
         ) ??
         receivableStore.receivables.find(
           (receivable) =>
@@ -196,16 +151,12 @@ async function loadPage() {
             hasCompleteBlockchainMetadata(receivable),
         ) ??
         receivableStore.receivables.find(
-          (receivable) =>
-            isBuyerFor(receivable) &&
-            receivable.status === 'CREATED',
+          (receivable) => isBuyerFor(receivable) && receivable.status === 'CREATED',
         ) ??
         receivableStore.receivables.find(
           (receivable) =>
-            sameId(
-              currentCompanyId.value,
-              receivable.sellerCompanyId,
-            ) && receivable.status === 'VERIFIED',
+            sameId(currentCompanyId.value, receivable.sellerCompanyId) &&
+            receivable.status === 'VERIFIED',
         ) ??
         receivableStore.receivables[0]
       await receivableStore.loadOne(initialReceivable.receivableId)
@@ -224,9 +175,7 @@ async function submit() {
   try {
     await receivableStore.create({
       ...form,
-      buyerBusinessNumber: normalizeBusinessNumber(
-        form.buyerBusinessNumber,
-      ),
+      buyerBusinessNumber: normalizeBusinessNumber(form.buyerBusinessNumber),
       documentHash: form.documentHash || null,
       description: form.description || null,
     })
@@ -257,9 +206,7 @@ async function selectReceivable(receivableId) {
 
 async function selectPendingReceivable() {
   if (!pendingSync.value) return
-  const recoveryRouteName = externalRecoveryRouteName(
-    pendingSync.value,
-  )
+  const recoveryRouteName = externalRecoveryRouteName(pendingSync.value)
   if (recoveryRouteName) {
     await router.push({ name: recoveryRouteName })
     return
@@ -276,10 +223,7 @@ async function refreshSelectedReceivable() {
   buyerAttestationAccepted.value = false
   isRefreshing.value = true
   try {
-    await Promise.all([
-      receivableStore.loadAll(),
-      receivableStore.loadOne(receivableId),
-    ])
+    await Promise.all([receivableStore.loadAll(), receivableStore.loadOne(receivableId)])
     successMessage.value = '채권의 최신 상태를 불러왔습니다.'
     await inspectSelectedTokenizationJournal()
   } catch (error) {
@@ -295,22 +239,18 @@ async function createOnchain() {
 
   clearMessages()
   isChainActionRunning.value = true
-  actionStage.value =
-    'MetaMask 서명 후 GIWA 블록 확인을 기다리고 있습니다...'
+  actionStage.value = 'MetaMask 서명 후 GIWA 블록 확인을 기다리고 있습니다...'
   try {
-    const result = await createReceivableOnchain(
-      receivable,
-      (submitted) => {
-        savePendingSynchronization({
-          type: 'chain-created',
-          phase: 'submitted',
-          receivableId: receivable.receivableId,
-          companyId: currentCompanyId.value,
-          payload: submitted,
-        })
-        lastTxHash.value = submitted.txHash
-      },
-    )
+    const result = await createReceivableOnchain(receivable, (submitted) => {
+      savePendingSynchronization({
+        type: 'chain-created',
+        phase: 'submitted',
+        receivableId: receivable.receivableId,
+        companyId: currentCompanyId.value,
+        payload: submitted,
+      })
+      lastTxHash.value = submitted.txHash
+    })
     savePendingSynchronization({
       type: 'chain-created',
       phase: 'confirmed',
@@ -322,8 +262,7 @@ async function createOnchain() {
     lastTxHash.value = result.txHash
     await synchronizePending()
   } catch (error) {
-    lastTxHash.value =
-      error.txHash ?? pendingSync.value?.payload.txHash ?? ''
+    lastTxHash.value = error.txHash ?? pendingSync.value?.payload.txHash ?? ''
     clearTerminalPendingTransaction(error)
     errorMessage.value = error.message
     actionStage.value = ''
@@ -336,29 +275,24 @@ async function verifyOnchain() {
   const receivable = selectedReceivable.value
   if (!receivable) return
   if (!canSubmitVerification.value) {
-    errorMessage.value =
-      '채권 내용을 확인하고 Buyer 검증 동의 항목을 선택해 주세요.'
+    errorMessage.value = '채권 내용을 확인하고 Buyer 검증 동의 항목을 선택해 주세요.'
     return
   }
 
   clearMessages()
   isChainActionRunning.value = true
-  actionStage.value =
-    'Buyer MetaMask 서명 후 GIWA 블록 확인을 기다리고 있습니다...'
+  actionStage.value = 'Buyer MetaMask 서명 후 GIWA 블록 확인을 기다리고 있습니다...'
   try {
-    const result = await verifyReceivableOnchain(
-      receivable,
-      (submitted) => {
-        savePendingSynchronization({
-          type: 'verified',
-          phase: 'submitted',
-          receivableId: receivable.receivableId,
-          companyId: currentCompanyId.value,
-          payload: submitted,
-        })
-        lastTxHash.value = submitted.txHash
-      },
-    )
+    const result = await verifyReceivableOnchain(receivable, (submitted) => {
+      savePendingSynchronization({
+        type: 'verified',
+        phase: 'submitted',
+        receivableId: receivable.receivableId,
+        companyId: currentCompanyId.value,
+        payload: submitted,
+      })
+      lastTxHash.value = submitted.txHash
+    })
     savePendingSynchronization({
       type: 'verified',
       phase: 'confirmed',
@@ -370,8 +304,7 @@ async function verifyOnchain() {
     lastTxHash.value = result.txHash
     await synchronizePending()
   } catch (error) {
-    lastTxHash.value =
-      error.txHash ?? pendingSync.value?.payload.txHash ?? ''
+    lastTxHash.value = error.txHash ?? pendingSync.value?.payload.txHash ?? ''
     clearTerminalPendingTransaction(error)
     errorMessage.value = error.message
     actionStage.value = ''
@@ -383,48 +316,36 @@ async function verifyOnchain() {
 async function tokenizeOnchain() {
   const requestedReceivable = selectedReceivable.value
   if (!requestedReceivable) return
-  if (
-    pendingSync.value ||
-    !isTokenizationCandidateFor(requestedReceivable)
-  ) {
-    errorMessage.value =
-      'Buyer 검증과 온체인 메타데이터를 확인한 뒤 다시 시도해 주세요.'
+  if (pendingSync.value || !isTokenizationCandidateFor(requestedReceivable)) {
+    errorMessage.value = 'Buyer 검증과 온체인 메타데이터를 확인한 뒤 다시 시도해 주세요.'
     return
   }
 
   clearMessages()
-  const journalAllowsMint =
-    await inspectSelectedTokenizationJournal()
+  const journalAllowsMint = await inspectSelectedTokenizationJournal()
   const receivable = selectedReceivable.value
   if (
     !journalAllowsMint ||
     pendingSync.value ||
-    !sameId(
-      requestedReceivable.receivableId,
-      receivable?.receivableId,
-    ) ||
+    !sameId(requestedReceivable.receivableId, receivable?.receivableId) ||
     !isTokenizationCandidateFor(receivable)
   ) {
     return
   }
 
   isChainActionRunning.value = true
-  actionStage.value =
-    'Seller MetaMask 서명 후 GIWA NFT 민팅 블록 확인을 기다리고 있습니다...'
+  actionStage.value = 'Seller MetaMask 서명 후 GIWA NFT 민팅 블록 확인을 기다리고 있습니다...'
   try {
-    const result = await tokenizeReceivableOnchain(
-      receivable,
-      (submitted) => {
-        savePendingSynchronization({
-          type: 'tokenized',
-          phase: 'submitted',
-          receivableId: receivable.receivableId,
-          companyId: currentCompanyId.value,
-          payload: submitted,
-        })
-        lastTxHash.value = submitted.txHash
-      },
-    )
+    const result = await tokenizeReceivableOnchain(receivable, (submitted) => {
+      savePendingSynchronization({
+        type: 'tokenized',
+        phase: 'submitted',
+        receivableId: receivable.receivableId,
+        companyId: currentCompanyId.value,
+        payload: submitted,
+      })
+      lastTxHash.value = submitted.txHash
+    })
     savePendingSynchronization({
       type: 'tokenized',
       phase: 'confirmed',
@@ -436,8 +357,7 @@ async function tokenizeOnchain() {
     lastTxHash.value = result.txHash
     await synchronizePending()
   } catch (error) {
-    lastTxHash.value =
-      error.txHash ?? pendingSync.value?.payload.txHash ?? ''
+    lastTxHash.value = error.txHash ?? pendingSync.value?.payload.txHash ?? ''
     clearTerminalPendingTransaction(error)
     errorMessage.value = error.message
     actionStage.value = ''
@@ -455,19 +375,13 @@ async function inspectSelectedTokenizationJournal() {
   const receivable = selectedReceivable.value
   const storedTokenization =
     pendingSync.value?.type === 'tokenized' &&
-    sameId(
-      pendingSync.value.receivableId,
-      receivable?.receivableId,
-    )
+    sameId(pendingSync.value.receivableId, receivable?.receivableId)
       ? pendingSync.value
       : null
   if (receivable?.status === 'TOKENIZED') {
     if (storedTokenization) {
       clearPendingSynchronization()
-      lastTxHash.value =
-        receivable.tokenizeTxHash ??
-        storedTokenization.payload?.txHash ??
-        ''
+      lastTxHash.value = receivable.tokenizeTxHash ?? storedTokenization.payload?.txHash ?? ''
     }
     resetTokenizationJournalCheck()
     return false
@@ -497,14 +411,8 @@ async function inspectSelectedTokenizationJournal() {
   )
 
   try {
-    const transactions =
-      await getReceivableBlockchainTransactions(receivableId)
-    if (
-      !isCurrentTokenizationJournalRequest(
-        requestSequence,
-        receivableId,
-      )
-    ) {
+    const transactions = await getReceivableBlockchainTransactions(receivableId)
+    if (!isCurrentTokenizationJournalRequest(requestSequence, receivableId)) {
       return false
     }
     if (!Array.isArray(transactions)) {
@@ -512,14 +420,10 @@ async function inspectSelectedTokenizationJournal() {
     }
 
     const tokenizationTransactions = transactions.filter(
-      (transaction) =>
-        transaction?.transactionType === TOKENIZE_TRANSACTION_TYPE,
+      (transaction) => transaction?.transactionType === TOKENIZE_TRANSACTION_TYPE,
     )
     const localJournal = tokenizationTransactions.find((transaction) =>
-      sameHex(
-        transaction?.txHash,
-        localTokenization?.payload?.txHash,
-      ),
+      sameHex(transaction?.txHash, localTokenization?.payload?.txHash),
     )
     const selectedJournal = selectTokenizationJournal(
       tokenizationTransactions,
@@ -563,15 +467,10 @@ async function inspectSelectedTokenizationJournal() {
       return true
     }
 
-    if (
-      localTokenization &&
-      !localJournal &&
-      selectedJournal.kind === 'pending'
-    ) {
-      const additionalServerPendingCount =
-        tokenizationTransactions.filter(
-          (transaction) => transaction?.txStatus === 'PENDING',
-        ).length
+    if (localTokenization && !localJournal && selectedJournal.kind === 'pending') {
+      const additionalServerPendingCount = tokenizationTransactions.filter(
+        (transaction) => transaction?.txStatus === 'PENDING',
+      ).length
       savePendingSynchronization({
         ...localTokenization,
         additionalServerPendingCount,
@@ -596,10 +495,7 @@ async function inspectSelectedTokenizationJournal() {
     }
 
     if (selectedJournal.kind === 'confirmed') {
-      const hasRpcProof = hasCompleteTokenizationRpcProof(
-        journal,
-        receivable,
-      )
+      const hasRpcProof = hasCompleteTokenizationRpcProof(journal, receivable)
       savePendingSynchronization({
         type: 'tokenized',
         phase: 'confirmed',
@@ -611,9 +507,7 @@ async function inspectSelectedTokenizationJournal() {
         payload: {
           txHash: journal.txHash,
           contractAddress: journal.contractAddress,
-          ...(hasRpcProof
-            ? { tokenId: String(journal.eventTokenId) }
-            : {}),
+          ...(hasRpcProof ? { tokenId: String(journal.eventTokenId) } : {}),
         },
       })
       lastTxHash.value = journal.txHash
@@ -630,13 +524,9 @@ async function inspectSelectedTokenizationJournal() {
     const pendingTransactions = tokenizationTransactions.filter(
       (transaction) => transaction?.txStatus === 'PENDING',
     )
-    const existingPayload =
-      sameHex(
-        localTokenization?.payload?.txHash,
-        journal.txHash,
-      )
-        ? localTokenization.payload
-        : {}
+    const existingPayload = sameHex(localTokenization?.payload?.txHash, journal.txHash)
+      ? localTokenization.payload
+      : {}
     savePendingSynchronization({
       type: 'tokenized',
       phase: 'submitted',
@@ -660,12 +550,7 @@ async function inspectSelectedTokenizationJournal() {
     )
     return false
   } catch (error) {
-    if (
-      !isCurrentTokenizationJournalRequest(
-        requestSequence,
-        receivableId,
-      )
-    ) {
+    if (!isCurrentTokenizationJournalRequest(requestSequence, receivableId)) {
       return false
     }
     setTokenizationJournalState(
@@ -677,11 +562,7 @@ async function inspectSelectedTokenizationJournal() {
   }
 }
 
-function selectTokenizationJournal(
-  transactions,
-  localTxHash,
-  receivable,
-) {
+function selectTokenizationJournal(transactions, localTxHash, receivable) {
   const confirmedTransactions = transactions.filter(
     (transaction) => transaction?.txStatus === 'CONFIRMED',
   )
@@ -711,10 +592,7 @@ function selectTokenizationJournal(
     return { kind: 'pending', journal: pendingTransactions[0] }
   }
 
-  const hasUnknownStatus = transactions.some(
-    (transaction) =>
-      transaction?.txStatus !== 'FAILED',
-  )
+  const hasUnknownStatus = transactions.some((transaction) => transaction?.txStatus !== 'FAILED')
   return hasUnknownStatus ? { kind: 'unknown' } : null
 }
 
@@ -738,10 +616,7 @@ function hasCompleteTokenizationRpcProof(journal, receivable) {
     isTransactionHash(journal.blockHash) &&
     isPositiveIntegerString(journal.gasUsed) &&
     isNonNegativeDecimalString(journal.effectiveGasPrice) &&
-    sameId(
-      journal.eventReceivableId,
-      receivable.onchainReceivableId,
-    ) &&
+    sameId(journal.eventReceivableId, receivable.onchainReceivableId) &&
     isPositiveIntegerString(journal.eventTokenId) &&
     isPositiveIntegerString(journal.verificationVersion)
   )
@@ -758,25 +633,17 @@ function resetTokenizationJournalCheck() {
   setTokenizationJournalState('idle', null, '')
 }
 
-function isCurrentTokenizationJournalRequest(
-  requestSequence,
-  receivableId,
-) {
+function isCurrentTokenizationJournalRequest(requestSequence, receivableId) {
   return (
     requestSequence === tokenizationJournalRequestSequence &&
     isTokenizationCandidateFor(selectedReceivable.value) &&
-    sameId(
-      selectedReceivable.value?.receivableId,
-      receivableId,
-    )
+    sameId(selectedReceivable.value?.receivableId, receivableId)
   )
 }
 
 async function retryPendingSync() {
   if (!pendingSync.value) return
-  const recoveryRouteName = externalRecoveryRouteName(
-    pendingSync.value,
-  )
+  const recoveryRouteName = externalRecoveryRouteName(pendingSync.value)
   if (recoveryRouteName) {
     await router.push({ name: recoveryRouteName })
     return
@@ -822,23 +689,18 @@ async function resumePendingConfirmation() {
   const receivable = selectedReceivable.value
   if (!synchronization || !receivable) return
 
-  actionStage.value =
-    '기존 GIWA 트랜잭션의 블록 확인을 이어받고 있습니다...'
+  actionStage.value = '기존 GIWA 트랜잭션의 블록 확인을 이어받고 있습니다...'
   try {
-    const result = await resumeReceivableTransaction(
-      receivable,
-      synchronization,
-      (submitted) => {
-        savePendingSynchronization({
-          ...synchronization,
-          payload: {
-            ...synchronization.payload,
-            ...submitted,
-          },
-        })
-        lastTxHash.value = submitted.txHash
-      },
-    )
+    const result = await resumeReceivableTransaction(receivable, synchronization, (submitted) => {
+      savePendingSynchronization({
+        ...synchronization,
+        payload: {
+          ...synchronization.payload,
+          ...submitted,
+        },
+      })
+      lastTxHash.value = submitted.txHash
+    })
     savePendingSynchronization({
       ...synchronization,
       phase: 'confirmed',
@@ -850,9 +712,7 @@ async function resumePendingConfirmation() {
   } catch (error) {
     actionStage.value = ''
     lastTxHash.value =
-      error.txHash ??
-      pendingSync.value?.payload.txHash ??
-      synchronization.payload.txHash
+      error.txHash ?? pendingSync.value?.payload.txHash ?? synchronization.payload.txHash
     clearTerminalPendingTransaction(error)
     errorMessage.value = error.message
   }
@@ -867,13 +727,9 @@ async function synchronizePending() {
   }
   if (
     !synchronization.journalConfirmed &&
-    isSynchronizationAlreadyApplied(
-      synchronization,
-      selectedReceivable.value,
-    )
+    isSynchronizationAlreadyApplied(synchronization, selectedReceivable.value)
   ) {
-    successMessage.value =
-      '이미 서버에 반영된 블록체인 작업을 확인했습니다.'
+    successMessage.value = '이미 서버에 반영된 블록체인 작업을 확인했습니다.'
     clearPendingSynchronization()
     actionStage.value = ''
     return
@@ -883,8 +739,7 @@ async function synchronizePending() {
     return
   }
 
-  actionStage.value =
-    '온체인 트랜잭션 확인 완료 · 서버 상태를 동기화하고 있습니다...'
+  actionStage.value = '온체인 트랜잭션 확인 완료 · 서버 상태를 동기화하고 있습니다...'
   try {
     switch (synchronization.type) {
       case 'chain-created':
@@ -896,19 +751,15 @@ async function synchronizePending() {
           'GIWA 채권 생성과 서버 동기화가 완료되었습니다. Buyer 검증을 기다립니다.'
         break
       case 'verified':
-        await receivableStore.markVerified(
-          synchronization.receivableId,
-          synchronization.payload,
-        )
+        await receivableStore.markVerified(synchronization.receivableId, synchronization.payload)
         successMessage.value =
           'Buyer 검증과 서버 동기화가 완료되었습니다. 다음 단계는 Seller 토큰화입니다.'
         buyerAttestationAccepted.value = false
         break
       case 'tokenized':
-        await receivableStore.markTokenized(
-          synchronization.receivableId,
-          { txHash: synchronization.payload.txHash },
-        )
+        await receivableStore.markTokenized(synchronization.receivableId, {
+          txHash: synchronization.payload.txHash,
+        })
         successMessage.value =
           '채권 토큰화와 NFT 민팅이 완료되었습니다. 다음 단계는 Funder 자금 공급입니다.'
         break
@@ -920,20 +771,15 @@ async function synchronizePending() {
   } catch (error) {
     const isTerminal = clearTerminalPendingTransaction(error)
     const isServerRecoveredTokenization =
-      synchronization.type === 'tokenized' &&
-      synchronization.recoveredFromServerJournal
-    if (
-      !isServerRecoveredTokenization &&
-      error.code === 'BLOCKCHAIN_TRANSACTION_NOT_CONFIRMED'
-    ) {
+      synchronization.type === 'tokenized' && synchronization.recoveredFromServerJournal
+    if (!isServerRecoveredTokenization && error.code === 'BLOCKCHAIN_TRANSACTION_NOT_CONFIRMED') {
       savePendingSynchronization({
         ...synchronization,
         journalConfirmed: false,
       })
     } else if (
       !isServerRecoveredTokenization &&
-      error.code ===
-      'BLOCKCHAIN_SYNCHRONIZATION_EVENT_MISMATCH'
+      error.code === 'BLOCKCHAIN_SYNCHRONIZATION_EVENT_MISMATCH'
     ) {
       savePendingSynchronization({
         ...synchronization,
@@ -981,9 +827,7 @@ function savePendingSynchronization(synchronization) {
   pendingSync.value = synchronization
   let synchronizations
   try {
-    synchronizations = JSON.parse(
-      localStorage.getItem(PENDING_SYNC_STORAGE_KEY) ?? '{}',
-    )
+    synchronizations = JSON.parse(localStorage.getItem(PENDING_SYNC_STORAGE_KEY) ?? '{}')
   } catch {
     synchronizations = {}
   }
@@ -1000,15 +844,10 @@ function clearPendingSynchronization() {
   if (companyId == null) return
 
   try {
-    const synchronizations = JSON.parse(
-      localStorage.getItem(PENDING_SYNC_STORAGE_KEY) ?? '{}',
-    )
+    const synchronizations = JSON.parse(localStorage.getItem(PENDING_SYNC_STORAGE_KEY) ?? '{}')
     delete synchronizations[String(companyId)]
     if (Object.keys(synchronizations).length) {
-      localStorage.setItem(
-        PENDING_SYNC_STORAGE_KEY,
-        JSON.stringify(synchronizations),
-      )
+      localStorage.setItem(PENDING_SYNC_STORAGE_KEY, JSON.stringify(synchronizations))
     } else {
       localStorage.removeItem(PENDING_SYNC_STORAGE_KEY)
     }
@@ -1032,42 +871,24 @@ function clearTerminalPendingTransaction(error) {
   return isTerminal
 }
 
-function isSynchronizationAlreadyApplied(
-  synchronization,
-  receivable,
-) {
+function isSynchronizationAlreadyApplied(synchronization, receivable) {
   if (!receivable) return false
 
   if (synchronization.type === 'chain-created') {
     return (
-      sameId(
-        synchronization.payload.onchainReceivableId,
-        receivable.onchainReceivableId,
-      ) &&
-      sameHex(
-        synchronization.payload.contractAddress,
-        receivable.contractAddress,
-      ) &&
-      sameHex(
-        synchronization.payload.txHash,
-        receivable.createTxHash,
-      )
+      sameId(synchronization.payload.onchainReceivableId, receivable.onchainReceivableId) &&
+      sameHex(synchronization.payload.contractAddress, receivable.contractAddress) &&
+      sameHex(synchronization.payload.txHash, receivable.createTxHash)
     )
   }
 
   if (synchronization.type === 'verified') {
-    return sameHex(
-      synchronization.payload.txHash,
-      receivable.verifyTxHash,
-    )
+    return sameHex(synchronization.payload.txHash, receivable.verifyTxHash)
   }
 
   if (synchronization.type === 'tokenized') {
     return (
-      sameHex(
-        synchronization.payload.txHash,
-        receivable.tokenizeTxHash,
-      ) &&
+      sameHex(synchronization.payload.txHash, receivable.tokenizeTxHash) &&
       sameId(synchronization.payload.tokenId, receivable.tokenId)
     )
   }
@@ -1098,9 +919,7 @@ function externalRecoveryRouteName(synchronization) {
 }
 
 function counterpartyName(receivable) {
-  return isBuyerFor(receivable)
-    ? receivable.sellerCompanyName
-    : receivable.buyerCompanyName
+  return isBuyerFor(receivable) ? receivable.sellerCompanyName : receivable.buyerCompanyName
 }
 
 function counterpartyRole(receivable) {
@@ -1112,14 +931,10 @@ function receivableActionLabel(receivable) {
     return '상환 완료'
   }
   if (receivable.status === 'FUNDED') {
-    return isBuyerFor(receivable)
-      ? 'Buyer 상환 필요'
-      : 'Buyer 상환 대기'
+    return isBuyerFor(receivable) ? 'Buyer 상환 필요' : 'Buyer 상환 대기'
   }
   if (isBuyerFor(receivable) && receivable.status === 'CREATED') {
-    return hasCompleteBlockchainMetadata(receivable)
-      ? 'Buyer 검증 필요'
-      : 'Seller 온체인 생성 대기'
+    return hasCompleteBlockchainMetadata(receivable) ? 'Buyer 검증 필요' : 'Seller 온체인 생성 대기'
   }
   if (isBuyerFor(receivable) && receivable.status === 'VERIFIED') {
     return 'Seller 토큰화 대기'
@@ -1128,9 +943,7 @@ function receivableActionLabel(receivable) {
     sameId(currentCompanyId.value, receivable.sellerCompanyId) &&
     receivable.status === 'CREATED'
   ) {
-    return receivable.onchainReceivableId
-      ? 'Buyer 검증 대기'
-      : 'Seller 온체인 생성 필요'
+    return receivable.onchainReceivableId ? 'Buyer 검증 대기' : 'Seller 온체인 생성 필요'
   }
   if (
     sameId(currentCompanyId.value, receivable.sellerCompanyId) &&
@@ -1146,30 +959,22 @@ function receivableActionLabel(receivable) {
 
 function hasCompleteBlockchainMetadata(receivable) {
   return Boolean(
-    receivable?.onchainReceivableId &&
-      receivable?.contractAddress &&
-      receivable?.createTxHash,
+    receivable?.onchainReceivableId && receivable?.contractAddress && receivable?.createTxHash,
   )
 }
 
 function isTokenizationCandidateFor(receivable) {
   return Boolean(
     receivable &&
-      sameId(
-        currentCompanyId.value,
-        receivable.sellerCompanyId,
-      ) &&
-      receivable.status === 'VERIFIED' &&
-      hasCompleteBlockchainMetadata(receivable) &&
-      receivable.verifyTxHash,
+    sameId(currentCompanyId.value, receivable.sellerCompanyId) &&
+    receivable.status === 'VERIFIED' &&
+    hasCompleteBlockchainMetadata(receivable) &&
+    receivable.verifyTxHash,
   )
 }
 
 function isTransactionHash(value) {
-  return (
-    typeof value === 'string' &&
-    /^0x[0-9a-fA-F]{64}$/.test(value)
-  )
+  return typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)
 }
 
 function isPositiveIntegerString(value) {
@@ -1177,9 +982,7 @@ function isPositiveIntegerString(value) {
 }
 
 function isNonNegativeDecimalString(value) {
-  return /^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(
-    String(value ?? ''),
-  )
+  return /^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(String(value ?? ''))
 }
 
 function formatAmount(value) {
@@ -1200,11 +1003,7 @@ function updateBuyerBusinessNumber(event) {
         <h1>매출채권</h1>
       </div>
       <div class="header-actions">
-        <button
-          class="secondary"
-          type="button"
-          @click="router.push({ name: 'dashboard' })"
-        >
+        <button class="secondary" type="button" @click="router.push({ name: 'dashboard' })">
           대시보드
         </button>
         <button type="button" @click="showForm = !showForm">
@@ -1253,23 +1052,11 @@ function updateBuyerBusinessNumber(event) {
         <div class="two-columns">
           <label>
             채권 금액 (KRW)
-            <input
-              v-model="form.faceValue"
-              type="number"
-              min="1"
-              step="1"
-              required
-            />
+            <input v-model="form.faceValue" type="number" min="1" step="1" required />
           </label>
           <label>
             펀딩 요청 금액 (KRW)
-            <input
-              v-model="form.fundingAmount"
-              type="number"
-              min="1"
-              step="1"
-              required
-            />
+            <input v-model="form.fundingAmount" type="number" min="1" step="1" required />
           </label>
           <label>
             발행일
@@ -1282,19 +1069,11 @@ function updateBuyerBusinessNumber(event) {
         </div>
         <label>
           문서 SHA-256 해시 (선택)
-          <input
-            v-model="form.documentHash"
-            maxlength="66"
-            placeholder="0x..."
-          />
+          <input v-model="form.documentHash" maxlength="66" placeholder="0x..." />
         </label>
         <label>
           설명 (선택)
-          <textarea
-            v-model="form.description"
-            maxlength="1000"
-            rows="3"
-          ></textarea>
+          <textarea v-model="form.description" maxlength="1000" rows="3"></textarea>
         </label>
         <button type="submit" :disabled="isSubmitting">
           {{ isSubmitting ? '등록 중...' : 'DB에 등록' }}
@@ -1313,15 +1092,10 @@ function updateBuyerBusinessNumber(event) {
           :key="item.receivableId"
           class="receivable-row"
           :class="{
-            selected: sameId(
-              selectedReceivable?.receivableId,
-              item.receivableId,
-            ),
+            selected: sameId(selectedReceivable?.receivableId, item.receivableId),
           }"
           type="button"
-          :aria-pressed="
-            sameId(selectedReceivable?.receivableId, item.receivableId)
-          "
+          :aria-pressed="sameId(selectedReceivable?.receivableId, item.receivableId)"
           @click="selectReceivable(item.receivableId)"
         >
           <span>
@@ -1334,9 +1108,7 @@ function updateBuyerBusinessNumber(event) {
               {{ receivableActionLabel(item) }}
             </small>
           </span>
-          <span class="amount">
-            {{ formatAmount(item.faceValue) }} {{ item.currencyCode }}
-          </span>
+          <span class="amount"> {{ formatAmount(item.faceValue) }} {{ item.currencyCode }} </span>
           <span class="status">{{ item.status }}</span>
         </button>
       </section>
@@ -1362,13 +1134,15 @@ function updateBuyerBusinessNumber(event) {
             <dt>만기일</dt>
             <dd>{{ selectedReceivable.maturityDate }}</dd>
             <dt>Seller 지갑</dt>
-            <dd>{{ selectedReceivable.sellerWalletAddress }}</dd>
+            <dd class="technical-value">{{ selectedReceivable.sellerWalletAddress }}</dd>
             <dt>Buyer 지갑</dt>
-            <dd>{{ selectedReceivable.buyerWalletAddress }}</dd>
+            <dd class="technical-value">{{ selectedReceivable.buyerWalletAddress }}</dd>
             <dt>Funder 지갑</dt>
-            <dd>{{ selectedReceivable.funderWalletAddress || '-' }}</dd>
+            <dd class="technical-value">{{ selectedReceivable.funderWalletAddress || '-' }}</dd>
             <dt>문서 해시</dt>
-            <dd>{{ selectedReceivable.documentHash || '등록되지 않음' }}</dd>
+            <dd class="technical-value">
+              {{ selectedReceivable.documentHash || '등록되지 않음' }}
+            </dd>
             <dt>상태</dt>
             <dd>{{ selectedReceivable.status }}</dd>
             <dt>온체인 ID</dt>
@@ -1473,25 +1247,21 @@ function updateBuyerBusinessNumber(event) {
               <h3 id="buyer-review-title">채권 내용 확인 및 검증</h3>
             </div>
             <p>
-              온체인은 실제 거래 사실을 자동으로 판단하지 않습니다. 위의 거래
-              조건을 확인한 Buyer 회사의 지갑 서명이 채무 확인 증거로 기록됩니다.
+              온체인은 실제 거래 사실을 자동으로 판단하지 않습니다. 위의 거래 조건을 확인한 Buyer
+              회사의 지갑 서명이 채무 확인 증거로 기록됩니다.
             </p>
             <ul class="review-checklist">
               <li>Seller와 Buyer 회사 및 등록 지갑이 올바른지 확인</li>
               <li>채권 금액, 펀딩 요청 금액, 발행일과 만기일 확인</li>
               <li>설명과 문서 해시가 실제 거래 증빙과 일치하는지 확인</li>
             </ul>
-            <p
-              v-if="!hasCompleteChainMetadata"
-              class="review-prerequisite"
-              role="status"
-            >
-              지금 채권 내용을 검토할 수 있습니다. MetaMask 서명은 Seller가
-              미검증 채권을 GIWA에 생성한 뒤 활성화됩니다.
+            <p v-if="!hasCompleteChainMetadata" class="review-prerequisite" role="status">
+              지금 채권 내용을 검토할 수 있습니다. MetaMask 서명은 Seller가 미검증 채권을 GIWA에
+              생성한 뒤 활성화됩니다.
             </p>
             <p v-else class="review-ready" role="status">
-              Seller의 GIWA 생성이 완료되었습니다. 서명 직전에 화면 정보와
-              온체인 CREATED 데이터를 다시 대조합니다.
+              Seller의 GIWA 생성이 완료되었습니다. 서명 직전에 화면 정보와 온체인 CREATED 데이터를
+              다시 대조합니다.
             </p>
             <label class="attestation">
               <input
@@ -1500,8 +1270,7 @@ function updateBuyerBusinessNumber(event) {
                 :disabled="isChainActionRunning || Boolean(pendingSync)"
               />
               <span>
-                위 거래 조건과 증빙을 확인했으며, Buyer 회사로서 해당 채무
-                내용을 확인합니다.
+                위 거래 조건과 증빙을 확인했으며, Buyer 회사로서 해당 채무 내용을 확인합니다.
               </span>
             </label>
             <div class="review-actions">
@@ -1513,11 +1282,7 @@ function updateBuyerBusinessNumber(event) {
               >
                 {{ isRefreshing ? '불러오는 중...' : '상태 새로고침' }}
               </button>
-              <button
-                type="button"
-                :disabled="!canSubmitVerification"
-                @click="verifyOnchain"
-              >
+              <button type="button" :disabled="!canSubmitVerification" @click="verifyOnchain">
                 {{ buyerVerificationButtonText }}
               </button>
             </div>
@@ -1525,31 +1290,26 @@ function updateBuyerBusinessNumber(event) {
 
           <div class="workflow-card">
             <strong>현재 단계</strong>
-            <p
-              v-if="
-                pendingSyncForSelected &&
-                pendingSync.phase === 'submitted'
-              "
-            >
+            <p v-if="pendingSyncForSelected && pendingSync.phase === 'submitted'">
               <template v-if="pendingSync.recoveredFromServerJournal">
                 서버 저널에서
                 {{
                   pendingSync.pendingTransactionCount > 1
                     ? `진행 중인 민팅 ${pendingSync.pendingTransactionCount}건`
                     : '진행 중인 민팅'
-                }}을 확인했습니다. 새 민팅을 보내지 말고 아래 트랜잭션의 블록
-                확인을 이어받아 주세요. 서버 조회만으로는 nonce·교체 정보를
-                모두 복원할 수 없어 기존 해시를 기준으로 안전하게 확인합니다.
+                }}을 확인했습니다. 새 민팅을 보내지 말고 아래 트랜잭션의 블록 확인을 이어받아
+                주세요. 서버 조회만으로는 nonce·교체 정보를 모두 복원할 수 없어 기존 해시를 기준으로
+                안전하게 확인합니다.
               </template>
               <template v-else>
-                트랜잭션이 GIWA에 제출되었습니다. 새 트랜잭션을 보내지 말고 기존
-                블록 확인을 이어받아 주세요.
+                트랜잭션이 GIWA에 제출되었습니다. 새 트랜잭션을 보내지 말고 기존 블록 확인을
+                이어받아 주세요.
               </template>
             </p>
             <p v-else-if="pendingSyncForSelected">
               <template v-if="pendingSync.recoveredFromServerJournal">
-                이미 CONFIRMED 처리된 NFT 민팅을 서버 저널에서 확인했습니다.
-                MetaMask로 다시 민팅하지 말고
+                이미 CONFIRMED 처리된 NFT 민팅을 서버 저널에서 확인했습니다. MetaMask로 다시
+                민팅하지 말고
                 {{
                   pendingSync.serverRpcProof
                     ? '확인된 민팅 결과를 DB에 동기화해 주세요.'
@@ -1557,26 +1317,24 @@ function updateBuyerBusinessNumber(event) {
                 }}
               </template>
               <template v-else>
-                온체인 트랜잭션은 성공했습니다. 새 트랜잭션을 보내기 전에 서버
-                동기화를 완료해 주세요.
+                온체인 트랜잭션은 성공했습니다. 새 트랜잭션을 보내기 전에 서버 동기화를 완료해
+                주세요.
               </template>
             </p>
             <p v-else-if="pendingSync">
-              채권 #{{ pendingSync.receivableId }}의 서버 동기화가 남아 있어 새
-              블록체인 요청이 잠겨 있습니다.
+              채권 #{{ pendingSync.receivableId }}의 서버 동기화가 남아 있어 새 블록체인 요청이 잠겨
+              있습니다.
             </p>
             <p v-else-if="canCreateOnchain">
               DB 등록이 끝났습니다. Seller 지갑으로 GIWA 채권을 생성해 주세요.
             </p>
             <p
               v-else-if="
-                isBuyer &&
-                selectedReceivable.status === 'CREATED' &&
-                !hasCompleteChainMetadata
+                isBuyer && selectedReceivable.status === 'CREATED' && !hasCompleteChainMetadata
               "
             >
-              Buyer 검토 대상입니다. Seller의 GIWA 온체인 생성을 기다리는
-              동안 위 채권 내용을 먼저 확인할 수 있습니다.
+              Buyer 검토 대상입니다. Seller의 GIWA 온체인 생성을 기다리는 동안 위 채권 내용을 먼저
+              확인할 수 있습니다.
             </p>
             <p v-else-if="canVerify">
               GIWA 채권이 생성되었습니다. Buyer 지갑으로 채무 내용을 검증해 주세요.
@@ -1590,47 +1348,24 @@ function updateBuyerBusinessNumber(event) {
             >
               온체인 생성 완료 · Buyer 검증을 기다리고 있습니다.
             </p>
-            <p
-              v-else-if="shouldShowTokenizationJournalGate"
-              aria-live="polite"
-            >
-              {{
-                tokenizationJournalMessage ||
-                '서버의 기존 NFT 민팅 이력을 확인해야 합니다.'
-              }}
+            <p v-else-if="shouldShowTokenizationJournalGate" aria-live="polite">
+              {{ tokenizationJournalMessage || '서버의 기존 NFT 민팅 이력을 확인해야 합니다.' }}
             </p>
-            <p
-              v-else-if="canTokenize"
-            >
-              Buyer 검증이 완료되었습니다. Seller 지갑으로 채권 NFT를 민팅해
-              주세요.
+            <p v-else-if="canTokenize">
+              Buyer 검증이 완료되었습니다. Seller 지갑으로 채권 NFT를 민팅해 주세요.
             </p>
-            <p
-              v-else-if="
-                isBuyer && selectedReceivable.status === 'VERIFIED'
-              "
-            >
+            <p v-else-if="isBuyer && selectedReceivable.status === 'VERIFIED'">
               채권 검증이 완료되었습니다. Seller의 NFT 민팅을 기다리고 있습니다.
             </p>
-            <p
-              v-else-if="
-                isSeller && selectedReceivable.status === 'VERIFIED'
-              "
-            >
-              Buyer 검증은 완료되었지만 토큰화에 필요한 온체인 메타데이터가
-              부족합니다. 페이지를 새로고침해 주세요.
+            <p v-else-if="isSeller && selectedReceivable.status === 'VERIFIED'">
+              Buyer 검증은 완료되었지만 토큰화에 필요한 온체인 메타데이터가 부족합니다. 페이지를
+              새로고침해 주세요.
             </p>
             <p v-else-if="selectedReceivable.status === 'TOKENIZED'">
-              채권 NFT 민팅이 완료되었습니다. Funder 자금 공급을 기다리고
-              있습니다.
+              채권 NFT 민팅이 완료되었습니다. Funder 자금 공급을 기다리고 있습니다.
             </p>
-            <p
-              v-else-if="
-                isBuyer && selectedReceivable.status === 'FUNDED'
-              "
-            >
-              Funder 자금 공급이 완료되었습니다. Buyer 지갑으로 채권 금액을
-              상환해 주세요.
+            <p v-else-if="isBuyer && selectedReceivable.status === 'FUNDED'">
+              Funder 자금 공급이 완료되었습니다. Buyer 지갑으로 채권 금액을 상환해 주세요.
             </p>
             <p v-else-if="selectedReceivable.status === 'FUNDED'">
               Funder 자금 공급이 완료되었습니다. Buyer 상환을 기다리고 있습니다.
@@ -1638,9 +1373,7 @@ function updateBuyerBusinessNumber(event) {
             <p v-else-if="selectedReceivable.status === 'REPAID'">
               Buyer 상환이 완료되었습니다. 채권 상태가 REPAID로 기록되었습니다.
             </p>
-            <p v-else>
-              현재 계정에서 실행할 생성·검증 작업이 없습니다.
-            </p>
+            <p v-else>현재 계정에서 실행할 생성·검증 작업이 없습니다.</p>
 
             <button
               v-if="pendingSync && !pendingSyncForSelected"
@@ -1655,21 +1388,13 @@ function updateBuyerBusinessNumber(event) {
               :disabled="isChainActionRunning"
               @click="createOnchain"
             >
-              {{
-                isChainActionRunning
-                  ? 'GIWA 확인 중...'
-                  : 'Seller 지갑으로 GIWA 채권 생성'
-              }}
+              {{ isChainActionRunning ? 'GIWA 확인 중...' : 'Seller 지갑으로 GIWA 채권 생성' }}
             </button>
             <button
               v-if="shouldShowTokenizationJournalGate"
               class="secondary"
               type="button"
-              :disabled="
-                isTokenizationJournalChecking ||
-                isRefreshing ||
-                isChainActionRunning
-              "
+              :disabled="isTokenizationJournalChecking || isRefreshing || isChainActionRunning"
               @click="refreshTokenizationJournal"
             >
               {{
@@ -1684,16 +1409,10 @@ function updateBuyerBusinessNumber(event) {
               :disabled="isChainActionRunning"
               @click="tokenizeOnchain"
             >
-              {{
-                isChainActionRunning
-                  ? 'NFT 민팅 확인 중...'
-                  : 'Seller 지갑으로 채권 NFT 민팅'
-              }}
+              {{ isChainActionRunning ? 'NFT 민팅 확인 중...' : 'Seller 지갑으로 채권 NFT 민팅' }}
             </button>
             <button
-              v-if="
-                isBuyer && selectedReceivable.status === 'FUNDED'
-              "
+              v-if="isBuyer && selectedReceivable.status === 'FUNDED'"
               type="button"
               @click="router.push({ name: 'repayment' })"
             >
@@ -1701,11 +1420,7 @@ function updateBuyerBusinessNumber(event) {
             </button>
           </div>
 
-          <div
-            v-if="pendingSyncForSelected"
-            class="sync-alert"
-            role="alert"
-          >
+          <div v-if="pendingSyncForSelected" class="sync-alert" role="alert">
             <strong v-if="pendingSync.phase === 'submitted'">
               {{
                 pendingSync.type === 'tokenized'
@@ -1720,21 +1435,16 @@ function updateBuyerBusinessNumber(event) {
             <p>{{ pendingSync.payload.txHash }}</p>
             <p v-if="pendingSync.additionalServerPendingCount">
               서버에 별도 진행 중인 민팅
-              {{ pendingSync.additionalServerPendingCount }}건도 있습니다.
-              현재 브라우저에 저장된 트랜잭션을 먼저 확인합니다.
+              {{ pendingSync.additionalServerPendingCount }}건도 있습니다. 현재 브라우저에 저장된
+              트랜잭션을 먼저 확인합니다.
             </p>
-            <button
-              type="button"
-              :disabled="isChainActionRunning"
-              @click="retryPendingSync"
-            >
+            <button type="button" :disabled="isChainActionRunning" @click="retryPendingSync">
               {{
                 pendingSync.phase === 'submitted'
                   ? '기존 트랜잭션 확인 이어받기'
                   : pendingSync.type !== 'tokenized'
                     ? '서버 동기화 재시도'
-                    : pendingSync.recoveredFromServerJournal &&
-                        !pendingSync.serverRpcProof
+                    : pendingSync.recoveredFromServerJournal && !pendingSync.serverRpcProof
                       ? '서버 검증 및 DB 동기화 재개'
                       : '민팅 결과 DB 동기화'
               }}
@@ -1749,188 +1459,327 @@ function updateBuyerBusinessNumber(event) {
 
 <style scoped>
 .receivables-page {
-  min-height: 100vh;
+  min-height: 100%;
   padding: 32px;
+  background: #f4f8f5;
+  color: #15352b;
 }
+
 header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 20px;
-  align-items: center;
   max-width: 1180px;
   margin: 0 auto 24px;
 }
+
 .eyebrow {
+  margin: 0 0 3px;
   color: #0b7654;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 800;
+  letter-spacing: 0.09em;
 }
+
 h1 {
+  margin: 0;
   color: #15352b;
   font-size: 32px;
-  font-weight: 700;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
 }
+
 h2 {
   margin-bottom: 18px;
   color: #15352b;
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 750;
+  line-height: 1.35;
 }
+
 .header-actions {
   display: flex;
   gap: 10px;
 }
+
 .panel {
   max-width: 1180px;
   margin: 0 auto 20px;
   padding: 24px;
-  border: 1px solid #dfe5e1;
-  border-radius: 14px;
-  background: white;
+  border: 1px solid #dce5e0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(21, 53, 43, 0.04);
 }
+
 form,
 label {
   display: grid;
   gap: 8px;
 }
+
 form {
   gap: 16px;
 }
+
+form > button {
+  min-width: 150px;
+  justify-self: start;
+}
+
 .two-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+
 label {
   color: #27463b;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 650;
 }
+
 input,
 textarea {
   width: 100%;
+  min-height: 44px;
   padding: 11px 12px;
   border: 1px solid #b8c7c0;
-  border-radius: 8px;
-  font: inherit;
+  border-radius: 9px;
+  outline: none;
+  background: #fbfdfc;
+  color: #15352b;
   resize: vertical;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
 }
+
+input:hover,
+textarea:hover {
+  border-color: #8fa69b;
+  background: #ffffff;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #0b7654;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(11, 118, 84, 0.12);
+}
+
 button {
+  min-height: 42px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   padding: 11px 16px;
   background: #0b7654;
   color: white;
   cursor: pointer;
-  font: inherit;
   font-weight: 700;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    color 0.16s ease;
 }
+
+button:hover:not(:disabled) {
+  background: #075f44;
+}
+
+button:focus-visible {
+  outline: 3px solid rgba(11, 118, 84, 0.28);
+  outline-offset: 2px;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
+
 .secondary {
   border: 1px solid #9eb2a8;
-  background: white;
+  background: #ffffff;
   color: #315548;
 }
+
+.secondary:hover:not(:disabled) {
+  border-color: #759889;
+  background: #f1f7f4;
+}
+
 .message {
   max-width: 1180px;
   margin: 0 auto 16px;
   padding: 12px 16px;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
   overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.55;
 }
+
 .message a {
   margin-left: 8px;
+  color: inherit;
+  font-weight: 700;
 }
+
 .error {
+  border-color: #efc0c0;
   background: #fff0f0;
-  color: #ba1a1a;
+  color: #a32323;
 }
+
 .success {
+  border-color: #afd8c7;
   background: #e8f7ef;
-  color: #0b7654;
+  color: #086245;
 }
+
 .pending,
 .transaction {
+  border-color: #bfd6eb;
   background: #eef5ff;
   color: #22558c;
 }
+
 .content-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
+  align-items: start;
   gap: 20px;
   max-width: 1180px;
   margin: 0 auto;
 }
+
 .content-grid .panel {
   width: 100%;
   margin: 0;
 }
+
 .receivable-row {
   display: grid;
   grid-template-columns: 1fr auto auto;
-  gap: 16px;
   align-items: center;
+  gap: 16px;
   width: 100%;
   margin-top: 10px;
+  padding: 14px 16px;
+  border: 1px solid #e1e9e5;
+  border-radius: 11px;
   text-align: left;
   background: #f4f8f5;
   color: #15352b;
 }
-.receivable-row.selected {
-  outline: 2px solid #0b7654;
-  outline-offset: 1px;
-  background: #eaf6ef;
+
+.receivable-row:hover:not(:disabled) {
+  border-color: #b8cfc3;
+  background: #edf6f1;
 }
+
+.receivable-row.selected {
+  border-color: #0b7654;
+  outline: none;
+  background: #eaf6ef;
+  box-shadow: 0 0 0 1px rgba(11, 118, 84, 0.16);
+}
+
+.receivable-row.selected:hover:not(:disabled) {
+  background: #e5f3eb;
+}
+
 .receivable-row span:first-child {
   display: grid;
+  gap: 2px;
 }
+
+.receivable-row strong {
+  font-weight: 750;
+}
+
 .receivable-row small {
   color: #62736b;
+  line-height: 1.45;
 }
+
 .receivable-row .action-hint {
   margin-top: 4px;
   color: #0b7654;
   font-weight: 700;
 }
+
 .amount {
+  white-space: nowrap;
+  font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
+
 .status {
   padding: 4px 8px;
   border-radius: 999px;
   background: #dff2e8;
   color: #0b7654;
   font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
 }
+
 .empty {
   color: #788a82;
+  line-height: 1.6;
 }
+
 dl {
   display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 12px;
+  grid-template-columns: 96px minmax(0, 1fr);
+  column-gap: 18px;
+  row-gap: 0;
+  margin: 0;
 }
+
 dt {
+  padding: 8px 0;
+  border-bottom: 1px solid #edf1ef;
   color: #788a82;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
 }
+
 dd {
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid #edf1ef;
   color: #15352b;
   overflow-wrap: anywhere;
+  line-height: 1.5;
 }
+
+.technical-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
 .chain-reference {
   display: flex;
-  gap: 8px;
   align-items: flex-start;
   flex-wrap: wrap;
+  gap: 8px;
 }
+
 .chain-reference span {
+  flex: 1 1 180px;
   min-width: 0;
   overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
 }
+
 .explorer-button {
   display: inline-flex;
   flex: 0 0 auto;
@@ -1945,22 +1794,32 @@ dd {
   font-weight: 700;
   line-height: 1;
   text-decoration: none;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
 }
+
 .explorer-button:hover {
+  border-color: #075f44;
   background: #eaf6ef;
+  color: #075f44;
 }
+
 .explorer-button:focus-visible {
-  outline: 2px solid #0b7654;
+  outline: 3px solid rgba(11, 118, 84, 0.24);
   outline-offset: 2px;
 }
+
 .review-card {
   display: grid;
   gap: 14px;
   margin-top: 22px;
   padding: 18px;
-  border: 2px solid #0b7654;
+  border: 1px solid #76ae96;
   border-radius: 12px;
   background: #f2faf6;
+  box-shadow: 0 6px 16px rgba(21, 53, 43, 0.04);
 }
 .review-eyebrow {
   margin: 0 0 4px;
@@ -1987,6 +1846,10 @@ dd {
   color: #27463b;
   font-size: 14px;
 }
+
+.review-checklist li::marker {
+  color: #0b7654;
+}
 .review-card .review-prerequisite,
 .review-card .review-ready {
   padding: 11px 12px;
@@ -2008,14 +1871,31 @@ dd {
   border: 1px solid #b8cfc3;
   border-radius: 8px;
   background: white;
+  cursor: pointer;
   line-height: 1.5;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
 }
+
+.attestation:hover {
+  border-color: #86ad9b;
+  background: #fbfefc;
+}
+
+.attestation:focus-within {
+  border-color: #0b7654;
+  box-shadow: 0 0 0 3px rgba(11, 118, 84, 0.12);
+}
+
 .attestation input {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
   margin-top: 2px;
   padding: 0;
+  accent-color: #0b7654;
 }
 .review-actions {
   display: grid;
@@ -2041,6 +1921,17 @@ dd {
 .workflow-card p {
   color: #27463b;
 }
+
+.workflow-card > strong,
+.sync-alert > strong {
+  font-weight: 750;
+}
+
+.workflow-card p,
+.sync-alert p {
+  margin: 0;
+  line-height: 1.55;
+}
 .sync-alert {
   border: 1px solid #e5b66f;
   background: #fff8e9;
@@ -2054,19 +1945,55 @@ dd {
   .receivables-page {
     padding: 20px;
   }
+
   header {
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .header-actions button {
+    flex: 1 1 140px;
+  }
+
+  .panel {
+    padding: 20px;
+  }
+
   .two-columns,
   .content-grid {
     grid-template-columns: 1fr;
   }
+
   .receivable-row {
     grid-template-columns: 1fr;
   }
+
+  dl {
+    grid-template-columns: 88px minmax(0, 1fr);
+    column-gap: 12px;
+  }
+
   .review-actions {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .receivables-page {
+    padding: 20px 16px 32px;
+  }
+
+  .panel {
+    padding: 18px;
+  }
+
+  form > button {
+    width: 100%;
   }
 }
 </style>

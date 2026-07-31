@@ -73,10 +73,12 @@ function logout() {
     <section>
       <p class="eyebrow">GIWA RECEIVABLE FINANCE</p>
       <h1>로그인되었습니다.</h1>
-      <p>회사 지갑을 MetaMask와 연결하세요. 개인 키는 저장되지 않습니다.</p>
+      <p class="description">회사 지갑을 MetaMask와 연결하세요. 개인 키는 저장되지 않습니다.</p>
       <div class="wallet-card">
         <span>현재 회사 지갑</span>
-        <strong v-if="wallet.isConnected">{{ wallet.walletAddress }}</strong>
+        <strong v-if="wallet.isConnected" class="wallet-address">
+          {{ wallet.walletAddress }}
+        </strong>
         <strong v-else>연결된 지갑 없음</strong>
 
         <button
@@ -99,7 +101,7 @@ function logout() {
           class="wallet-confirmation"
         >
           <span>선택한 MetaMask 계정</span>
-          <strong>{{ wallet.pendingWalletAddress }}</strong>
+          <strong class="wallet-address">{{ wallet.pendingWalletAddress }}</strong>
           <p>이 주소를 회사 지갑으로 연결하시겠습니까?</p>
           <div class="confirmation-actions">
             <button type="button" :disabled="isConnecting" @click="confirmWalletConnection">
@@ -159,70 +161,106 @@ function logout() {
           매출채권 상환
         </button>
       </div>
-      <button type="button" @click="logout">로그아웃</button>
+      <button class="logout-button" type="button" @click="logout">로그아웃</button>
     </section>
   </main>
 </template>
 
 <style scoped>
 .dashboard {
-  min-height: 100vh;
+  min-height: 100%;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: 48px 24px;
 }
+
 section {
   width: min(100%, 580px);
   padding: 40px;
-  border-radius: 16px;
-  background: white;
-  box-shadow: 0 20px 50px rgba(24, 62, 48, 0.08);
+  border: 1px solid #dce5e0;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(24, 62, 48, 0.08);
 }
+
 .eyebrow {
+  margin: 0;
   color: #0b7654;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 800;
+  letter-spacing: 0.09em;
 }
+
 h1 {
-  margin: 8px 0;
+  margin: 8px 0 6px;
   color: #15352b;
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
 }
-p {
+
+.description {
+  margin: 0;
   color: #62736b;
+  line-height: 1.6;
 }
+
 .wallet-card {
   display: grid;
   gap: 8px;
   margin-top: 24px;
   padding: 20px;
   border: 1px solid #dfe5e1;
-  border-radius: 12px;
+  border-radius: 13px;
+  background: #fbfdfc;
 }
+
 .wallet-card span {
   color: #62736b;
   font-size: 14px;
 }
+
 .wallet-card strong {
   overflow-wrap: anywhere;
   color: #15352b;
 }
+
+.wallet-address {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
 button {
+  min-height: 44px;
   margin-top: 24px;
   border: 0;
-  border-radius: 8px;
-  padding: 12px 16px;
+  border-radius: 9px;
+  padding: 11px 16px;
   background: #0b7654;
   color: white;
   cursor: pointer;
-  font: inherit;
   font-weight: 700;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
 }
+
+button:hover:not(:disabled) {
+  background: #075f44;
+}
+
+button:focus-visible {
+  outline: 3px solid rgba(11, 118, 84, 0.28);
+  outline-offset: 2px;
+}
+
 .wallet-card button {
   margin-top: 8px;
 }
+
 .wallet-confirmation {
   display: grid;
   gap: 8px;
@@ -230,55 +268,137 @@ button {
   padding-top: 16px;
   border-top: 1px solid #dfe5e1;
 }
+
+.wallet-confirmation p {
+  margin: 0;
+  color: #52675e;
+}
+
 .confirmation-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
+
 .confirmation-actions button {
   margin-top: 4px;
 }
+
 .secondary {
   border: 1px solid #9eb2a8;
-  background: white;
+  background: #ffffff;
   color: #315548;
 }
+
+.secondary:hover:not(:disabled) {
+  border-color: #759889;
+  background: #f1f7f4;
+}
+
 .text-button {
   background: transparent;
   color: #52675e;
 }
+
+.text-button:hover:not(:disabled) {
+  background: #edf3f0;
+  color: #27463b;
+}
+
 .conflict-alert {
   margin-top: 16px;
   padding: 18px;
   border: 1px solid #efb4b4;
-  border-radius: 10px;
+  border-radius: 11px;
   background: #fff4f4;
 }
+
 .conflict-alert strong,
 .conflict-alert p {
   color: #8f1717;
 }
+
+.conflict-alert p {
+  margin: 8px 0 0;
+  line-height: 1.55;
+}
+
 .danger {
   color: #8f1717;
 }
+
 button:disabled {
-  cursor: wait;
-  opacity: 0.65;
+  cursor: not-allowed;
+  opacity: 0.55;
 }
+
 .error {
   margin-top: 16px;
-  color: #ba1a1a;
+  padding: 12px 14px;
+  border: 1px solid #efc0c0;
+  border-radius: 9px;
+  background: #fff5f5;
+  color: #a32323;
 }
+
 .success {
   margin-top: 16px;
-  color: #0b7654;
+  padding: 12px 14px;
+  border: 1px solid #afd8c7;
+  border-radius: 9px;
+  background: #eef9f4;
+  color: #086245;
 }
+
 .service-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  margin-top: 18px;
 }
+
 .service-actions button {
   flex: 1 1 180px;
+  margin-top: 0;
+  border: 1px solid #a9cdbd;
+  background: #edf7f2;
+  color: #0b6548;
+}
+
+.service-actions button:hover:not(:disabled) {
+  border-color: #78ad96;
+  background: #e2f2ea;
+}
+
+.logout-button {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px solid #d1dcd6;
+  background: #ffffff;
+  color: #62736b;
+}
+
+.logout-button:hover:not(:disabled) {
+  border-color: #aebfb7;
+  background: #f4f7f5;
+  color: #315548;
+}
+
+@media (max-width: 600px) {
+  .dashboard {
+    padding: 32px 16px;
+  }
+
+  section {
+    padding: 30px 22px;
+  }
+
+  .confirmation-actions {
+    display: grid;
+  }
+
+  .service-actions {
+    display: grid;
+  }
 }
 </style>

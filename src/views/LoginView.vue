@@ -27,8 +27,7 @@ async function submit() {
         companyName: companyName.value,
         businessNumber: normalizeBusinessNumber(businessNumber.value),
       })
-    }
-    else await auth.login(credentials)
+    } else await auth.login(credentials)
     router.push({ name: 'dashboard' })
   } catch (error) {
     errorMessage.value = error.message
@@ -61,7 +60,13 @@ function updateBusinessNumber(event) {
         </label>
         <label>
           비밀번호
-          <input v-model="password" type="password" autocomplete="current-password" minlength="8" required />
+          <input
+            v-model="password"
+            type="password"
+            autocomplete="current-password"
+            minlength="8"
+            required
+          />
         </label>
         <template v-if="isSignup">
           <label>
@@ -101,17 +106,145 @@ function updateBusinessNumber(event) {
 </template>
 
 <style scoped>
-.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-.auth-card { width: min(100%, 420px); padding: 40px; border: 1px solid #dfe5e1; border-radius: 16px; background: #fff; box-shadow: 0 20px 50px rgba(24, 62, 48, 0.08); }
-.eyebrow { color: #0b7654; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; }
-h1 { margin-top: 8px; color: #15352b; font-size: 30px; font-weight: 700; }
-.description { margin: 8px 0 28px; color: #62736b; }
-form, label { display: grid; gap: 8px; }
-form { gap: 18px; }
-label { color: #27463b; font-size: 14px; font-weight: 600; }
-input { width: 100%; padding: 12px; border: 1px solid #b8c7c0; border-radius: 8px; font: inherit; }
-button { border: 0; border-radius: 8px; padding: 12px 16px; background: #0b7654; color: white; cursor: pointer; font: inherit; font-weight: 700; }
-button:disabled { cursor: wait; opacity: 0.65; }
-.text-button { width: 100%; margin-top: 16px; background: transparent; color: #0b7654; }
-.error { margin: -6px 0 0; color: #ba1a1a; font-size: 14px; }
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: clamp(24px, 5vw, 48px);
+}
+
+.auth-card {
+  width: min(100%, 420px);
+  padding: 40px;
+  border: 1px solid #dce5e0;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(24, 62, 48, 0.09);
+}
+
+.eyebrow {
+  margin: 0;
+  color: #0b7654;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+h1 {
+  margin: 8px 0 0;
+  color: #15352b;
+  font-size: 30px;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.description {
+  margin: 8px 0 28px;
+  color: #62736b;
+  line-height: 1.6;
+}
+
+form,
+label {
+  display: grid;
+  gap: 8px;
+}
+
+form {
+  gap: 18px;
+}
+
+label {
+  color: #27463b;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+input {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 12px;
+  border: 1px solid #b8c7c0;
+  border-radius: 9px;
+  outline: none;
+  background: #fbfdfc;
+  color: #15352b;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+input:hover {
+  border-color: #8fa69b;
+  background: #ffffff;
+}
+
+input:focus {
+  border-color: #0b7654;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(11, 118, 84, 0.12);
+}
+
+button {
+  min-height: 46px;
+  border: 0;
+  border-radius: 9px;
+  padding: 11px 16px;
+  background: #0b7654;
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+button:hover:not(:disabled) {
+  background: #075f44;
+}
+
+button:focus-visible {
+  outline: 3px solid rgba(11, 118, 84, 0.28);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.text-button {
+  width: 100%;
+  margin-top: 14px;
+  background: transparent;
+  color: #0b7654;
+}
+
+.text-button:hover:not(:disabled) {
+  background: #edf6f1;
+}
+
+.error {
+  margin: -2px 0 0;
+  padding: 11px 12px;
+  border: 1px solid #efc0c0;
+  border-radius: 9px;
+  background: #fff5f5;
+  color: #a32323;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+@media (max-width: 520px) {
+  .auth-page {
+    padding: 16px;
+  }
+
+  .auth-card {
+    padding: 30px 22px;
+  }
+}
 </style>
