@@ -6,6 +6,8 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('accessToken'))
   const user = ref(null)
   const isAuthenticated = computed(() => Boolean(token.value))
+  let userRequest = null
+  let userRequestToken = null
 
   async function authenticate(path, credentials) {
     const body = await apiRequest(path, {
@@ -32,8 +34,25 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = null
       return null
     }
-    user.value = await apiRequest('/auth/me')
-    return user.value
+    if (user.value) return user.value
+
+    const requestedToken = token.value
+    if (!userRequest || userRequestToken !== requestedToken) {
+      userRequestToken = requestedToken
+      const request = apiRequest('/auth/me')
+        .then((body) => {
+          if (token.value === requestedToken) user.value = body
+          return body
+        })
+        .finally(() => {
+          if (userRequest === request) {
+            userRequest = null
+            userRequestToken = null
+          }
+        })
+      userRequest = request
+    }
+    return userRequest
   }
 
   function logout() {

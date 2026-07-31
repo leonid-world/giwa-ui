@@ -5,8 +5,10 @@ import { transactionExplorerUrl } from '../contracts/addresses'
 import {
   createReceivableOnchain,
   resumeReceivableTransaction,
+  tokenizeReceivableOnchain,
   verifyReceivableOnchain,
 } from '../services/web3/receivableContract'
+import { getReceivableBlockchainTransactions } from '../services/blockchainTransactions'
 import { useAuthStore } from '../stores/auth'
 import { useReceivableStore } from '../stores/receivable'
 import { useWalletStore } from '../stores/wallet'
@@ -16,6 +18,7 @@ import {
 } from '../utils/businessNumber'
 
 const PENDING_SYNC_STORAGE_KEY = 'receivablePendingBlockchainSync'
+const TOKENIZE_TRANSACTION_TYPE = 'TOKENIZE_RECEIVABLE'
 const router = useRouter()
 const authStore = useAuthStore()
 const receivableStore = useReceivableStore()
@@ -28,8 +31,12 @@ const pendingSync = ref(null)
 const isSubmitting = ref(false)
 const isRefreshing = ref(false)
 const isChainActionRunning = ref(false)
+const tokenizationJournalStatus = ref('idle')
+const tokenizationJournalReceivableId = ref(null)
+const tokenizationJournalMessage = ref('')
 const showForm = ref(false)
 const buyerAttestationAccepted = ref(false)
+let tokenizationJournalRequestSequence = 0
 const form = reactive({
   buyerBusinessNumber: '',
   faceValue: '',
@@ -73,6 +80,11 @@ const hasCompleteChainMetadata = computed(
         selectedReceivable.value?.createTxHash,
     ),
 )
+const hasCompleteVerificationMetadata = computed(
+  () =>
+    hasCompleteChainMetadata.value &&
+    Boolean(selectedReceivable.value?.verifyTxHash),
+)
 const canCreateOnchain = computed(
   () =>
     !pendingSync.value &&
@@ -92,6 +104,31 @@ const canSubmitVerification = computed(
     buyerAttestationAccepted.value &&
     !isRefreshing.value &&
     !isChainActionRunning.value,
+)
+const isTokenizationCandidate = computed(
+  () =>
+    Boolean(isSeller.value) &&
+    selectedReceivable.value?.status === 'VERIFIED' &&
+    hasCompleteVerificationMetadata.value,
+)
+const isTokenizationJournalChecking = computed(
+  () => tokenizationJournalStatus.value === 'checking',
+)
+const shouldShowTokenizationJournalGate = computed(
+  () =>
+    !pendingSync.value &&
+    isTokenizationCandidate.value &&
+    !canTokenize.value,
+)
+const canTokenize = computed(
+  () =>
+    !pendingSync.value &&
+    isTokenizationCandidate.value &&
+    tokenizationJournalStatus.value === 'clear' &&
+    sameId(
+      tokenizationJournalReceivableId.value,
+      selectedReceivable.value?.receivableId,
+    ),
 )
 const buyerVerificationButtonText = computed(
   () => {
@@ -121,6 +158,7 @@ onMounted(loadPage)
 
 async function loadPage() {
   clearMessages()
+  resetTokenizationJournalCheck()
   buyerAttestationAccepted.value = false
   try {
     await Promise.all([
@@ -147,11 +185,19 @@ async function loadPage() {
             isBuyerFor(receivable) &&
             receivable.status === 'CREATED',
         ) ??
+        receivableStore.receivables.find(
+          (receivable) =>
+            sameId(
+              currentCompanyId.value,
+              receivable.sellerCompanyId,
+            ) && receivable.status === 'VERIFIED',
+        ) ??
         receivableStore.receivables[0]
       await receivableStore.loadOne(initialReceivable.receivableId)
     } else {
       receivableStore.clearSelection()
     }
+    await inspectSelectedTokenizationJournal()
   } catch (error) {
     errorMessage.value = error.message
   }
@@ -181,12 +227,14 @@ async function submit() {
 
 async function selectReceivable(receivableId) {
   clearMessages()
+  resetTokenizationJournalCheck()
   buyerAttestationAccepted.value = false
   try {
     await receivableStore.loadOne(receivableId)
     if (pendingSyncForSelected.value) {
       lastTxHash.value = pendingSync.value.payload.txHash
     }
+    await inspectSelectedTokenizationJournal()
   } catch (error) {
     errorMessage.value = error.message
   }
@@ -202,6 +250,7 @@ async function refreshSelectedReceivable() {
   if (!receivableId) return
 
   clearMessages({ keepTransaction: Boolean(pendingSync.value) })
+  resetTokenizationJournalCheck()
   buyerAttestationAccepted.value = false
   isRefreshing.value = true
   try {
@@ -210,6 +259,7 @@ async function refreshSelectedReceivable() {
       receivableStore.loadOne(receivableId),
     ])
     successMessage.value = '채권의 최신 상태를 불러왔습니다.'
+    await inspectSelectedTokenizationJournal()
   } catch (error) {
     errorMessage.value = error.message
   } finally {
@@ -242,6 +292,7 @@ async function createOnchain() {
     savePendingSynchronization({
       type: 'chain-created',
       phase: 'confirmed',
+      journalConfirmed: true,
       receivableId: receivable.receivableId,
       companyId: currentCompanyId.value,
       payload: result,
@@ -289,6 +340,7 @@ async function verifyOnchain() {
     savePendingSynchronization({
       type: 'verified',
       phase: 'confirmed',
+      journalConfirmed: true,
       receivableId: receivable.receivableId,
       companyId: currentCompanyId.value,
       payload: result,
@@ -306,11 +358,426 @@ async function verifyOnchain() {
   }
 }
 
+async function tokenizeOnchain() {
+  const requestedReceivable = selectedReceivable.value
+  if (!requestedReceivable) return
+  if (
+    pendingSync.value ||
+    !isTokenizationCandidateFor(requestedReceivable)
+  ) {
+    errorMessage.value =
+      'Buyer 검증과 온체인 메타데이터를 확인한 뒤 다시 시도해 주세요.'
+    return
+  }
+
+  clearMessages()
+  const journalAllowsMint =
+    await inspectSelectedTokenizationJournal()
+  const receivable = selectedReceivable.value
+  if (
+    !journalAllowsMint ||
+    pendingSync.value ||
+    !sameId(
+      requestedReceivable.receivableId,
+      receivable?.receivableId,
+    ) ||
+    !isTokenizationCandidateFor(receivable)
+  ) {
+    return
+  }
+
+  isChainActionRunning.value = true
+  actionStage.value =
+    'Seller MetaMask 서명 후 GIWA NFT 민팅 블록 확인을 기다리고 있습니다...'
+  try {
+    const result = await tokenizeReceivableOnchain(
+      receivable,
+      (submitted) => {
+        savePendingSynchronization({
+          type: 'tokenized',
+          phase: 'submitted',
+          receivableId: receivable.receivableId,
+          companyId: currentCompanyId.value,
+          payload: submitted,
+        })
+        lastTxHash.value = submitted.txHash
+      },
+    )
+    savePendingSynchronization({
+      type: 'tokenized',
+      phase: 'confirmed',
+      journalConfirmed: true,
+      receivableId: receivable.receivableId,
+      companyId: currentCompanyId.value,
+      payload: result,
+    })
+    lastTxHash.value = result.txHash
+    await synchronizePending()
+  } catch (error) {
+    lastTxHash.value =
+      error.txHash ?? pendingSync.value?.payload.txHash ?? ''
+    clearTerminalPendingTransaction(error)
+    errorMessage.value = error.message
+    actionStage.value = ''
+  } finally {
+    isChainActionRunning.value = false
+  }
+}
+
+async function refreshTokenizationJournal() {
+  clearMessages({ keepTransaction: Boolean(pendingSync.value) })
+  await inspectSelectedTokenizationJournal()
+}
+
+async function inspectSelectedTokenizationJournal() {
+  const receivable = selectedReceivable.value
+  const storedTokenization =
+    pendingSync.value?.type === 'tokenized' &&
+    sameId(
+      pendingSync.value.receivableId,
+      receivable?.receivableId,
+    )
+      ? pendingSync.value
+      : null
+  if (receivable?.status === 'TOKENIZED') {
+    if (storedTokenization) {
+      clearPendingSynchronization()
+      lastTxHash.value =
+        receivable.tokenizeTxHash ??
+        storedTokenization.payload?.txHash ??
+        ''
+    }
+    resetTokenizationJournalCheck()
+    return false
+  }
+  if (!isTokenizationCandidateFor(receivable)) {
+    resetTokenizationJournalCheck()
+    return false
+  }
+
+  const localTokenization = storedTokenization
+  if (pendingSync.value && !localTokenization) {
+    tokenizationJournalRequestSequence += 1
+    setTokenizationJournalState(
+      'blocked',
+      receivable.receivableId,
+      `채권 #${pendingSync.value.receivableId}의 기존 블록체인 작업을 먼저 처리해야 합니다.`,
+    )
+    return false
+  }
+
+  const requestSequence = ++tokenizationJournalRequestSequence
+  const receivableId = receivable.receivableId
+  setTokenizationJournalState(
+    'checking',
+    receivableId,
+    '서버의 기존 NFT 민팅 이력을 확인하고 있습니다. 확인 전에는 새 민팅을 시작할 수 없습니다.',
+  )
+
+  try {
+    const transactions =
+      await getReceivableBlockchainTransactions(receivableId)
+    if (
+      !isCurrentTokenizationJournalRequest(
+        requestSequence,
+        receivableId,
+      )
+    ) {
+      return false
+    }
+    if (!Array.isArray(transactions)) {
+      throw new Error('서버의 민팅 이력 응답 형식을 확인할 수 없습니다.')
+    }
+
+    const tokenizationTransactions = transactions.filter(
+      (transaction) =>
+        transaction?.transactionType === TOKENIZE_TRANSACTION_TYPE,
+    )
+    const localJournal = tokenizationTransactions.find((transaction) =>
+      sameHex(
+        transaction?.txHash,
+        localTokenization?.payload?.txHash,
+      ),
+    )
+    const selectedJournal = selectTokenizationJournal(
+      tokenizationTransactions,
+      localTokenization?.payload?.txHash,
+      receivable,
+    )
+
+    if (selectedJournal?.kind === 'unknown') {
+      setTokenizationJournalState(
+        'blocked',
+        receivableId,
+        '서버에 상태를 판별할 수 없는 민팅 이력이 있습니다. 새 민팅을 진행하지 말고 서버 상태를 다시 확인해 주세요.',
+      )
+      return false
+    }
+
+    if (!selectedJournal) {
+      if (localTokenization) {
+        if (localJournal?.txStatus === 'FAILED') {
+          clearPendingSynchronization()
+          lastTxHash.value = ''
+          setTokenizationJournalState(
+            'clear',
+            receivableId,
+            '기존 민팅 트랜잭션이 실패로 확정되어 복구 대기를 정리했습니다. 서버에 성공하거나 진행 중인 다른 민팅은 없습니다.',
+          )
+          return true
+        }
+        setTokenizationJournalState(
+          'adopted',
+          receivableId,
+          '브라우저에 복구할 민팅 트랜잭션이 남아 있습니다. 서버 저널에 아직 보이지 않더라도 새 민팅을 보내지 말고 기존 트랜잭션 확인을 이어받아 주세요.',
+        )
+        return false
+      }
+      setTokenizationJournalState(
+        'clear',
+        receivableId,
+        '서버에서 진행 중이거나 성공한 기존 NFT 민팅이 확인되지 않았습니다.',
+      )
+      return true
+    }
+
+    if (
+      localTokenization &&
+      !localJournal &&
+      selectedJournal.kind === 'pending'
+    ) {
+      const additionalServerPendingCount =
+        tokenizationTransactions.filter(
+          (transaction) => transaction?.txStatus === 'PENDING',
+        ).length
+      savePendingSynchronization({
+        ...localTokenization,
+        additionalServerPendingCount,
+      })
+      lastTxHash.value = localTokenization.payload.txHash
+      setTokenizationJournalState(
+        'adopted',
+        receivableId,
+        `브라우저에 저장된 기존 민팅을 먼저 복구합니다. 서버에도 별도 PENDING ${additionalServerPendingCount}건이 있어 새 민팅은 계속 차단됩니다.`,
+      )
+      return false
+    }
+
+    const journal = selectedJournal.journal
+    if (!isValidTokenizationJournal(journal, receivable)) {
+      setTokenizationJournalState(
+        'blocked',
+        receivableId,
+        '서버 민팅 이력의 회사·지갑·컨트랙트 정보가 현재 채권과 일치하지 않습니다. 안전을 위해 새 민팅을 차단했습니다.',
+      )
+      return false
+    }
+
+    if (selectedJournal.kind === 'confirmed') {
+      const hasRpcProof = hasCompleteTokenizationRpcProof(
+        journal,
+        receivable,
+      )
+      savePendingSynchronization({
+        type: 'tokenized',
+        phase: 'confirmed',
+        journalConfirmed: true,
+        recoveredFromServerJournal: true,
+        serverRpcProof: hasRpcProof,
+        receivableId,
+        companyId: currentCompanyId.value,
+        payload: {
+          txHash: journal.txHash,
+          contractAddress: journal.contractAddress,
+          ...(hasRpcProof
+            ? { tokenId: String(journal.eventTokenId) }
+            : {}),
+        },
+      })
+      lastTxHash.value = journal.txHash
+      setTokenizationJournalState(
+        'adopted',
+        receivableId,
+        hasRpcProof
+          ? '이미 성공하고 RPC 검증된 NFT 민팅을 확인했습니다. MetaMask를 다시 호출하지 말고 민팅 결과를 DB에 동기화해 주세요.'
+          : '이미 CONFIRMED 처리된 NFT 민팅을 확인했습니다. MetaMask를 다시 호출하지 말고 서버 RPC 재검증과 DB 동기화를 진행해 주세요.',
+      )
+      return false
+    }
+
+    const pendingTransactions = tokenizationTransactions.filter(
+      (transaction) => transaction?.txStatus === 'PENDING',
+    )
+    const existingPayload =
+      sameHex(
+        localTokenization?.payload?.txHash,
+        journal.txHash,
+      )
+        ? localTokenization.payload
+        : {}
+    savePendingSynchronization({
+      type: 'tokenized',
+      phase: 'submitted',
+      recoveredFromServerJournal: true,
+      pendingTransactionCount: pendingTransactions.length,
+      receivableId,
+      companyId: currentCompanyId.value,
+      payload: {
+        ...existingPayload,
+        txHash: journal.txHash,
+        contractAddress: journal.contractAddress,
+      },
+    })
+    lastTxHash.value = journal.txHash
+    setTokenizationJournalState(
+      'adopted',
+      receivableId,
+      pendingTransactions.length > 1
+        ? `서버에 진행 중인 민팅 ${pendingTransactions.length}건이 있습니다. 새 민팅은 차단되며, 우선 선택된 기존 트랜잭션의 블록 확인을 이어받아야 합니다.`
+        : '서버에 진행 중인 민팅이 있습니다. 새 민팅을 보내지 말고 기존 트랜잭션의 블록 확인을 이어받아 주세요.',
+    )
+    return false
+  } catch (error) {
+    if (
+      !isCurrentTokenizationJournalRequest(
+        requestSequence,
+        receivableId,
+      )
+    ) {
+      return false
+    }
+    setTokenizationJournalState(
+      'error',
+      receivableId,
+      `서버의 기존 민팅 이력을 확인하지 못해 새 민팅을 차단했습니다. 서버 연결을 확인한 뒤 다시 조회해 주세요. (${error.message})`,
+    )
+    return false
+  }
+}
+
+function selectTokenizationJournal(
+  transactions,
+  localTxHash,
+  receivable,
+) {
+  const confirmedTransactions = transactions.filter(
+    (transaction) => transaction?.txStatus === 'CONFIRMED',
+  )
+  const rpcConfirmed = confirmedTransactions.find((transaction) =>
+    hasCompleteTokenizationRpcProof(transaction, receivable),
+  )
+  if (rpcConfirmed) {
+    return { kind: 'confirmed', journal: rpcConfirmed }
+  }
+  if (confirmedTransactions.length) {
+    return {
+      kind: 'confirmed',
+      journal: confirmedTransactions[0],
+    }
+  }
+
+  const pendingTransactions = transactions.filter(
+    (transaction) => transaction?.txStatus === 'PENDING',
+  )
+  const localPending = pendingTransactions.find((transaction) =>
+    sameHex(transaction.txHash, localTxHash),
+  )
+  if (localPending) {
+    return { kind: 'pending', journal: localPending }
+  }
+  if (pendingTransactions.length) {
+    return { kind: 'pending', journal: pendingTransactions[0] }
+  }
+
+  const hasUnknownStatus = transactions.some(
+    (transaction) =>
+      transaction?.txStatus !== 'FAILED',
+  )
+  return hasUnknownStatus ? { kind: 'unknown' } : null
+}
+
+function isValidTokenizationJournal(journal, receivable) {
+  return (
+    sameId(journal?.receivableId, receivable.receivableId) &&
+    sameId(journal?.companyId, currentCompanyId.value) &&
+    sameHex(journal?.walletAddress, receivable.sellerWalletAddress) &&
+    sameHex(journal?.contractAddress, receivable.contractAddress) &&
+    journal?.functionName === 'tokenizeReceivable' &&
+    isTransactionHash(journal?.txHash)
+  )
+}
+
+function hasCompleteTokenizationRpcProof(journal, receivable) {
+  return (
+    journal?.txStatus === 'CONFIRMED' &&
+    Boolean(journal.rpcVerifiedAt) &&
+    isPositiveIntegerString(journal.chainId) &&
+    isPositiveIntegerString(journal.blockNumber) &&
+    isTransactionHash(journal.blockHash) &&
+    isPositiveIntegerString(journal.gasUsed) &&
+    isNonNegativeDecimalString(journal.effectiveGasPrice) &&
+    sameId(
+      journal.eventReceivableId,
+      receivable.onchainReceivableId,
+    ) &&
+    isPositiveIntegerString(journal.eventTokenId) &&
+    isPositiveIntegerString(journal.verificationVersion)
+  )
+}
+
+function setTokenizationJournalState(status, receivableId, message) {
+  tokenizationJournalStatus.value = status
+  tokenizationJournalReceivableId.value = receivableId
+  tokenizationJournalMessage.value = message
+}
+
+function resetTokenizationJournalCheck() {
+  tokenizationJournalRequestSequence += 1
+  setTokenizationJournalState('idle', null, '')
+}
+
+function isCurrentTokenizationJournalRequest(
+  requestSequence,
+  receivableId,
+) {
+  return (
+    requestSequence === tokenizationJournalRequestSequence &&
+    isTokenizationCandidateFor(selectedReceivable.value) &&
+    sameId(
+      selectedReceivable.value?.receivableId,
+      receivableId,
+    )
+  )
+}
+
 async function retryPendingSync() {
   if (!pendingSync.value) return
   clearMessages({ keepTransaction: true })
   isChainActionRunning.value = true
   try {
+    if (
+      pendingSync.value.type === 'tokenized' &&
+      pendingSync.value.recoveredFromServerJournal &&
+      pendingSync.value.phase === 'confirmed'
+    ) {
+      await inspectSelectedTokenizationJournal()
+      if (
+        tokenizationJournalStatus.value !== 'adopted' ||
+        pendingSync.value?.type !== 'tokenized' ||
+        !pendingSync.value.recoveredFromServerJournal ||
+        pendingSync.value.phase !== 'confirmed'
+      ) {
+        if (
+          tokenizationJournalStatus.value === 'error' ||
+          tokenizationJournalStatus.value === 'blocked'
+        ) {
+          errorMessage.value = tokenizationJournalMessage.value
+        }
+        return
+      }
+      await synchronizePending()
+      return
+    }
     if (pendingSync.value.phase === 'submitted') {
       await resumePendingConfirmation()
     } else {
@@ -332,10 +799,21 @@ async function resumePendingConfirmation() {
     const result = await resumeReceivableTransaction(
       receivable,
       synchronization,
+      (submitted) => {
+        savePendingSynchronization({
+          ...synchronization,
+          payload: {
+            ...synchronization.payload,
+            ...submitted,
+          },
+        })
+        lastTxHash.value = submitted.txHash
+      },
     )
     savePendingSynchronization({
       ...synchronization,
       phase: 'confirmed',
+      journalConfirmed: true,
       payload: result,
     })
     lastTxHash.value = result.txHash
@@ -343,7 +821,9 @@ async function resumePendingConfirmation() {
   } catch (error) {
     actionStage.value = ''
     lastTxHash.value =
-      error.txHash ?? synchronization.payload.txHash
+      error.txHash ??
+      pendingSync.value?.payload.txHash ??
+      synchronization.payload.txHash
     clearTerminalPendingTransaction(error)
     errorMessage.value = error.message
   }
@@ -356,30 +836,94 @@ async function synchronizePending() {
     await resumePendingConfirmation()
     return
   }
+  if (
+    !synchronization.journalConfirmed &&
+    isSynchronizationAlreadyApplied(
+      synchronization,
+      selectedReceivable.value,
+    )
+  ) {
+    successMessage.value =
+      '이미 서버에 반영된 블록체인 작업을 확인했습니다.'
+    clearPendingSynchronization()
+    actionStage.value = ''
+    return
+  }
+  if (!synchronization.journalConfirmed) {
+    await resumePendingConfirmation()
+    return
+  }
 
   actionStage.value =
     '온체인 트랜잭션 확인 완료 · 서버 상태를 동기화하고 있습니다...'
   try {
-    if (synchronization.type === 'chain-created') {
-      await receivableStore.markChainCreated(
-        synchronization.receivableId,
-        synchronization.payload,
-      )
-      successMessage.value =
-        'GIWA 채권 생성과 서버 동기화가 완료되었습니다. Buyer 검증을 기다립니다.'
-    } else {
-      await receivableStore.markVerified(
-        synchronization.receivableId,
-        synchronization.payload,
-      )
-      successMessage.value =
-        'Buyer 검증과 서버 동기화가 완료되었습니다. 다음 단계는 Seller 토큰화입니다.'
-      buyerAttestationAccepted.value = false
+    switch (synchronization.type) {
+      case 'chain-created':
+        await receivableStore.markChainCreated(
+          synchronization.receivableId,
+          synchronization.payload,
+        )
+        successMessage.value =
+          'GIWA 채권 생성과 서버 동기화가 완료되었습니다. Buyer 검증을 기다립니다.'
+        break
+      case 'verified':
+        await receivableStore.markVerified(
+          synchronization.receivableId,
+          synchronization.payload,
+        )
+        successMessage.value =
+          'Buyer 검증과 서버 동기화가 완료되었습니다. 다음 단계는 Seller 토큰화입니다.'
+        buyerAttestationAccepted.value = false
+        break
+      case 'tokenized':
+        await receivableStore.markTokenized(
+          synchronization.receivableId,
+          { txHash: synchronization.payload.txHash },
+        )
+        successMessage.value =
+          '채권 토큰화와 NFT 민팅이 완료되었습니다. 다음 단계는 Funder 자금 공급입니다.'
+        break
+      default:
+        throw new Error('저장된 블록체인 작업 종류를 확인할 수 없습니다.')
     }
     clearPendingSynchronization()
     actionStage.value = ''
   } catch (error) {
+    const isTerminal = clearTerminalPendingTransaction(error)
+    const isServerRecoveredTokenization =
+      synchronization.type === 'tokenized' &&
+      synchronization.recoveredFromServerJournal
+    if (
+      !isServerRecoveredTokenization &&
+      error.code === 'BLOCKCHAIN_TRANSACTION_NOT_CONFIRMED'
+    ) {
+      savePendingSynchronization({
+        ...synchronization,
+        journalConfirmed: false,
+      })
+    } else if (
+      !isServerRecoveredTokenization &&
+      error.code ===
+      'BLOCKCHAIN_SYNCHRONIZATION_EVENT_MISMATCH'
+    ) {
+      savePendingSynchronization({
+        ...synchronization,
+        phase: 'submitted',
+      })
+    }
     actionStage.value = ''
+    if (isTerminal) {
+      errorMessage.value =
+        `서버의 온체인 검증에서 복구할 수 없는 오류를 확인해 대기 작업을 정리했습니다. ` +
+        `화면을 새로고침한 뒤 지갑·네트워크·채권 정보를 확인해 주세요. (${error.message})`
+      return
+    }
+    if (isServerRecoveredTokenization) {
+      errorMessage.value =
+        `기존 민팅의 서버 동기화에 실패했습니다. MetaMask로 다시 민팅하지 말고 ` +
+        `아래 버튼으로 서버 저널을 재확인한 뒤 DB 동기화만 다시 진행해 주세요. (${error.message})`
+      return
+    }
     errorMessage.value =
       `온체인 트랜잭션은 성공했지만 서버 동기화에 실패했습니다. ` +
       `컨트랙트를 다시 호출하지 말고 아래 버튼으로 재시도해 주세요. (${error.message})`
@@ -420,6 +964,9 @@ function savePendingSynchronization(synchronization) {
 
 function clearPendingSynchronization() {
   const companyId = pendingSync.value?.companyId ?? currentCompanyId.value
+  if (pendingSync.value?.type === 'tokenized') {
+    tokenizationJournalRequestSequence += 1
+  }
   pendingSync.value = null
   if (companyId == null) return
 
@@ -442,16 +989,73 @@ function clearPendingSynchronization() {
 }
 
 function clearTerminalPendingTransaction(error) {
-  if (
+  const isTerminal =
     error.code === 'TRANSACTION_FAILED' ||
-    error.code === 'TRANSACTION_CANCELLED'
-  ) {
+    error.code === 'TRANSACTION_CANCELLED' ||
+    error.code === 'BLOCKCHAIN_TRANSACTION_FAILED' ||
+    error.code === 'BLOCKCHAIN_TRANSACTION_REVERTED' ||
+    error.code === 'BLOCKCHAIN_TRANSACTION_VERIFICATION_FAILED' ||
+    error.code === 'BLOCKCHAIN_EVENT_MISMATCH'
+
+  if (isTerminal) {
     clearPendingSynchronization()
   }
+  return isTerminal
+}
+
+function isSynchronizationAlreadyApplied(
+  synchronization,
+  receivable,
+) {
+  if (!receivable) return false
+
+  if (synchronization.type === 'chain-created') {
+    return (
+      sameId(
+        synchronization.payload.onchainReceivableId,
+        receivable.onchainReceivableId,
+      ) &&
+      sameHex(
+        synchronization.payload.contractAddress,
+        receivable.contractAddress,
+      ) &&
+      sameHex(
+        synchronization.payload.txHash,
+        receivable.createTxHash,
+      )
+    )
+  }
+
+  if (synchronization.type === 'verified') {
+    return sameHex(
+      synchronization.payload.txHash,
+      receivable.verifyTxHash,
+    )
+  }
+
+  if (synchronization.type === 'tokenized') {
+    return (
+      sameHex(
+        synchronization.payload.txHash,
+        receivable.tokenizeTxHash,
+      ) &&
+      sameId(synchronization.payload.tokenId, receivable.tokenId)
+    )
+  }
+
+  return false
 }
 
 function sameId(first, second) {
   return first != null && second != null && String(first) === String(second)
+}
+
+function sameHex(first, second) {
+  return (
+    typeof first === 'string' &&
+    typeof second === 'string' &&
+    first.toLowerCase() === second.toLowerCase()
+  )
 }
 
 function isBuyerFor(receivable) {
@@ -475,7 +1079,7 @@ function receivableActionLabel(receivable) {
       : 'Seller 온체인 생성 대기'
   }
   if (isBuyerFor(receivable) && receivable.status === 'VERIFIED') {
-    return 'Buyer 검증 완료'
+    return 'Seller 토큰화 대기'
   }
   if (
     sameId(currentCompanyId.value, receivable.sellerCompanyId) &&
@@ -485,14 +1089,53 @@ function receivableActionLabel(receivable) {
       ? 'Buyer 검증 대기'
       : 'Seller 온체인 생성 필요'
   }
+  if (
+    sameId(currentCompanyId.value, receivable.sellerCompanyId) &&
+    receivable.status === 'VERIFIED'
+  ) {
+    return 'Seller 토큰화 필요'
+  }
+  if (receivable.status === 'TOKENIZED') {
+    return 'Funder 자금 공급 대기'
+  }
   return receivable.status
 }
 
 function hasCompleteBlockchainMetadata(receivable) {
   return Boolean(
-    receivable.onchainReceivableId &&
-      receivable.contractAddress &&
-      receivable.createTxHash,
+    receivable?.onchainReceivableId &&
+      receivable?.contractAddress &&
+      receivable?.createTxHash,
+  )
+}
+
+function isTokenizationCandidateFor(receivable) {
+  return Boolean(
+    receivable &&
+      sameId(
+        currentCompanyId.value,
+        receivable.sellerCompanyId,
+      ) &&
+      receivable.status === 'VERIFIED' &&
+      hasCompleteBlockchainMetadata(receivable) &&
+      receivable.verifyTxHash,
+  )
+}
+
+function isTransactionHash(value) {
+  return (
+    typeof value === 'string' &&
+    /^0x[0-9a-fA-F]{64}$/.test(value)
+  )
+}
+
+function isPositiveIntegerString(value) {
+  return /^[1-9][0-9]*$/.test(String(value ?? ''))
+}
+
+function isNonNegativeDecimalString(value) {
+  return /^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(
+    String(value ?? ''),
   )
 }
 
@@ -689,6 +1332,10 @@ function updateBuyerBusinessNumber(event) {
             <dd>{{ selectedReceivable.createTxHash || '-' }}</dd>
             <dt>검증 Tx</dt>
             <dd>{{ selectedReceivable.verifyTxHash || '-' }}</dd>
+            <dt>NFT 토큰 ID</dt>
+            <dd>{{ selectedReceivable.tokenId || '-' }}</dd>
+            <dt>토큰화 Tx</dt>
+            <dd>{{ selectedReceivable.tokenizeTxHash || '-' }}</dd>
             <dt>설명</dt>
             <dd>{{ selectedReceivable.description || '-' }}</dd>
           </dl>
@@ -761,12 +1408,35 @@ function updateBuyerBusinessNumber(event) {
                 pendingSync.phase === 'submitted'
               "
             >
-              트랜잭션이 GIWA에 제출되었습니다. 새 트랜잭션을 보내지 말고 기존
-              블록 확인을 이어받아 주세요.
+              <template v-if="pendingSync.recoveredFromServerJournal">
+                서버 저널에서
+                {{
+                  pendingSync.pendingTransactionCount > 1
+                    ? `진행 중인 민팅 ${pendingSync.pendingTransactionCount}건`
+                    : '진행 중인 민팅'
+                }}을 확인했습니다. 새 민팅을 보내지 말고 아래 트랜잭션의 블록
+                확인을 이어받아 주세요. 서버 조회만으로는 nonce·교체 정보를
+                모두 복원할 수 없어 기존 해시를 기준으로 안전하게 확인합니다.
+              </template>
+              <template v-else>
+                트랜잭션이 GIWA에 제출되었습니다. 새 트랜잭션을 보내지 말고 기존
+                블록 확인을 이어받아 주세요.
+              </template>
             </p>
             <p v-else-if="pendingSyncForSelected">
-              온체인 트랜잭션은 성공했습니다. 새 트랜잭션을 보내기 전에 서버
-              동기화를 완료해 주세요.
+              <template v-if="pendingSync.recoveredFromServerJournal">
+                이미 CONFIRMED 처리된 NFT 민팅을 서버 저널에서 확인했습니다.
+                MetaMask로 다시 민팅하지 말고
+                {{
+                  pendingSync.serverRpcProof
+                    ? '확인된 민팅 결과를 DB에 동기화해 주세요.'
+                    : '서버 RPC 재검증과 DB 동기화를 재개해 주세요.'
+                }}
+              </template>
+              <template v-else>
+                온체인 트랜잭션은 성공했습니다. 새 트랜잭션을 보내기 전에 서버
+                동기화를 완료해 주세요.
+              </template>
             </p>
             <p v-else-if="pendingSync">
               채권 #{{ pendingSync.receivableId }}의 서버 동기화가 남아 있어 새
@@ -797,8 +1467,39 @@ function updateBuyerBusinessNumber(event) {
             >
               온체인 생성 완료 · Buyer 검증을 기다리고 있습니다.
             </p>
-            <p v-else-if="selectedReceivable.status === 'VERIFIED'">
-              Buyer 검증 완료 · 다음 TODO인 Seller 토큰화 대상입니다.
+            <p
+              v-else-if="shouldShowTokenizationJournalGate"
+              aria-live="polite"
+            >
+              {{
+                tokenizationJournalMessage ||
+                '서버의 기존 NFT 민팅 이력을 확인해야 합니다.'
+              }}
+            </p>
+            <p
+              v-else-if="canTokenize"
+            >
+              Buyer 검증이 완료되었습니다. Seller 지갑으로 채권 NFT를 민팅해
+              주세요.
+            </p>
+            <p
+              v-else-if="
+                isBuyer && selectedReceivable.status === 'VERIFIED'
+              "
+            >
+              채권 검증이 완료되었습니다. Seller의 NFT 민팅을 기다리고 있습니다.
+            </p>
+            <p
+              v-else-if="
+                isSeller && selectedReceivable.status === 'VERIFIED'
+              "
+            >
+              Buyer 검증은 완료되었지만 토큰화에 필요한 온체인 메타데이터가
+              부족합니다. 페이지를 새로고침해 주세요.
+            </p>
+            <p v-else-if="selectedReceivable.status === 'TOKENIZED'">
+              채권 NFT 민팅이 완료되었습니다. Funder 자금 공급을 기다리고
+              있습니다.
             </p>
             <p v-else>
               현재 계정에서 실행할 생성·검증 작업이 없습니다.
@@ -823,6 +1524,35 @@ function updateBuyerBusinessNumber(event) {
                   : 'Seller 지갑으로 GIWA 채권 생성'
               }}
             </button>
+            <button
+              v-if="shouldShowTokenizationJournalGate"
+              class="secondary"
+              type="button"
+              :disabled="
+                isTokenizationJournalChecking ||
+                isRefreshing ||
+                isChainActionRunning
+              "
+              @click="refreshTokenizationJournal"
+            >
+              {{
+                isTokenizationJournalChecking
+                  ? '서버 민팅 이력 확인 중...'
+                  : '서버 민팅 상태 다시 확인'
+              }}
+            </button>
+            <button
+              v-if="canTokenize"
+              type="button"
+              :disabled="isChainActionRunning"
+              @click="tokenizeOnchain"
+            >
+              {{
+                isChainActionRunning
+                  ? 'NFT 민팅 확인 중...'
+                  : 'Seller 지갑으로 채권 NFT 민팅'
+              }}
+            </button>
           </div>
 
           <div
@@ -831,10 +1561,22 @@ function updateBuyerBusinessNumber(event) {
             role="alert"
           >
             <strong v-if="pendingSync.phase === 'submitted'">
-              GIWA 제출 완료 · 블록 확인 필요
+              {{
+                pendingSync.type === 'tokenized'
+                  ? '기존 민팅 제출 확인 · 새 민팅 금지'
+                  : 'GIWA 제출 완료 · 블록 확인 필요'
+              }}
+            </strong>
+            <strong v-else-if="pendingSync.recoveredFromServerJournal">
+              기존 민팅 성공 확인 · MetaMask 재호출 금지
             </strong>
             <strong v-else>온체인 성공 · 서버 동기화 필요</strong>
             <p>{{ pendingSync.payload.txHash }}</p>
+            <p v-if="pendingSync.additionalServerPendingCount">
+              서버에 별도 진행 중인 민팅
+              {{ pendingSync.additionalServerPendingCount }}건도 있습니다.
+              현재 브라우저에 저장된 트랜잭션을 먼저 확인합니다.
+            </p>
             <button
               type="button"
               :disabled="isChainActionRunning"
@@ -843,7 +1585,12 @@ function updateBuyerBusinessNumber(event) {
               {{
                 pendingSync.phase === 'submitted'
                   ? '기존 트랜잭션 확인 이어받기'
-                  : '서버 동기화 재시도'
+                  : pendingSync.type !== 'tokenized'
+                    ? '서버 동기화 재시도'
+                    : pendingSync.recoveredFromServerJournal &&
+                        !pendingSync.serverRpcProof
+                      ? '서버 검증 및 DB 동기화 재개'
+                      : '민팅 결과 DB 동기화'
               }}
             </button>
           </div>

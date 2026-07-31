@@ -53,6 +53,18 @@ export const useReceivableStore = defineStore('receivable', () => {
     return selectedReceivable.value
   }
 
+  async function markTokenized(receivableId, payload) {
+    selectedReceivable.value = await apiRequest(
+      `/receivables/${receivableId}/tokenized`,
+      {
+        method: 'POST',
+        body: payload,
+      },
+    )
+    await loadAll()
+    return selectedReceivable.value
+  }
+
   return {
     receivables,
     selectedReceivable,
@@ -62,5 +74,6 @@ export const useReceivableStore = defineStore('receivable', () => {
     create,
     markChainCreated,
     markVerified,
+    markTokenized,
   }
 })
