@@ -3,3 +3,32 @@
 #app {
   min-height: 100vh;
 }
+
+.loading-state::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  border: 2px solid #b8d4c8;
+  border-top-color: #0b7654;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: giwa-loading-spin 0.8s linear infinite;
+}
+
+.empty-detail.loading-state::before {
+  margin: 0 auto 12px;
+}
+
+@keyframes giwa-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-state::before {
+    animation: none;
+  }
+}

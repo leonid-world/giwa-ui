@@ -12,14 +12,25 @@ const errorCode = ref('')
 const successMessage = ref('')
 const isSelecting = ref(false)
 const isConnecting = ref(false)
+const isWalletLoading = ref(true)
+const walletLoadFailed = ref(false)
 
-onMounted(async () => {
+onMounted(loadWalletState)
+
+async function loadWalletState() {
+  errorMessage.value = ''
+  errorCode.value = ''
+  isWalletLoading.value = true
+  walletLoadFailed.value = false
   try {
     await wallet.loadWallet()
   } catch (error) {
+    walletLoadFailed.value = true
     showError(error)
+  } finally {
+    isWalletLoading.value = false
   }
-})
+}
 
 async function selectWalletAccount() {
   errorMessage.value = ''
@@ -76,15 +87,19 @@ function logout() {
       <p class="description">회사 지갑을 MetaMask와 연결하세요. 개인 키는 저장되지 않습니다.</p>
       <div class="wallet-card">
         <span>현재 회사 지갑</span>
-        <strong v-if="wallet.isConnected" class="wallet-address">
+        <strong v-if="isWalletLoading" class="loading-state" role="status">
+          회사 지갑 확인 중...
+        </strong>
+        <strong v-else-if="wallet.isConnected" class="wallet-address">
           {{ wallet.walletAddress }}
         </strong>
+        <strong v-else-if="walletLoadFailed">지갑 상태 확인 실패</strong>
         <strong v-else>연결된 지갑 없음</strong>
 
         <button
           v-if="!wallet.hasPendingWallet"
           type="button"
-          :disabled="isSelecting"
+          :disabled="isSelecting || isWalletLoading || walletLoadFailed"
           @click="selectWalletAccount"
         >
           {{
@@ -136,26 +151,37 @@ function logout() {
           </button>
         </div>
       </div>
-      <p v-else-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
+      <div v-else-if="errorMessage" class="error" role="alert">
+        <span>{{ errorMessage }}</span>
+        <button
+          v-if="walletLoadFailed"
+          class="text-button"
+          type="button"
+          :disabled="isWalletLoading"
+          @click="loadWalletState"
+        >
+          {{ isWalletLoading ? '조회 중...' : '지갑 상태 다시 조회' }}
+        </button>
+      </div>
       <p v-if="successMessage" class="success" role="status">{{ successMessage }}</p>
       <div class="service-actions">
         <button
           type="button"
-          :disabled="!wallet.isConnected"
+          :disabled="!wallet.isConnected || isWalletLoading"
           @click="router.push({ name: 'receivables' })"
         >
           매출채권 관리
         </button>
         <button
           type="button"
-          :disabled="!wallet.isConnected"
+          :disabled="!wallet.isConnected || isWalletLoading"
           @click="router.push({ name: 'funding' })"
         >
           토큰화 채권 펀딩
         </button>
         <button
           type="button"
-          :disabled="!wallet.isConnected"
+          :disabled="!wallet.isConnected || isWalletLoading"
           @click="router.push({ name: 'repayment' })"
         >
           매출채권 상환
@@ -333,12 +359,28 @@ button:disabled {
 }
 
 .error {
+  display: grid;
+  gap: 8px;
   margin-top: 16px;
   padding: 12px 14px;
   border: 1px solid #efc0c0;
   border-radius: 9px;
   background: #fff5f5;
   color: #a32323;
+}
+
+.error .text-button {
+  justify-self: start;
+  min-height: auto;
+  margin-top: 0;
+  padding: 0;
+  color: #8f1717;
+}
+
+.error .text-button:hover:not(:disabled) {
+  background: transparent;
+  color: #6f1010;
+  text-decoration: underline;
 }
 
 .success {

@@ -53,7 +53,7 @@ function updateBusinessNumber(event) {
       <h1>{{ isSignup ? '계정을 만드세요' : '다시 오셨군요' }}</h1>
       <p class="description">매출채권 금융을 관리하려면 로그인하세요.</p>
 
-      <form @submit.prevent="submit">
+      <form :aria-busy="isSubmitting" @submit.prevent="submit">
         <label>
           이메일
           <input v-model="email" type="email" autocomplete="email" required />
@@ -63,7 +63,7 @@ function updateBusinessNumber(event) {
           <input
             v-model="password"
             type="password"
-            autocomplete="current-password"
+            :autocomplete="isSignup ? 'new-password' : 'current-password'"
             minlength="8"
             required
           />
@@ -75,7 +75,7 @@ function updateBusinessNumber(event) {
           </label>
           <label>
             회사명
-            <input v-model="companyName" type="text" required />
+            <input v-model="companyName" type="text" autocomplete="organization" required />
           </label>
           <label>
             사업자등록번호
@@ -98,7 +98,7 @@ function updateBusinessNumber(event) {
         </button>
       </form>
 
-      <button class="text-button" type="button" @click="toggleMode">
+      <button class="text-button" type="button" :disabled="isSubmitting" @click="toggleMode">
         {{ isSignup ? '이미 계정이 있으신가요? 로그인' : '처음이신가요? 회원가입' }}
       </button>
     </section>
@@ -107,7 +107,7 @@ function updateBusinessNumber(event) {
 
 <style scoped>
 .auth-page {
-  min-height: 100vh;
+  min-height: 100%;
   display: grid;
   place-items: center;
   padding: clamp(24px, 5vw, 48px);

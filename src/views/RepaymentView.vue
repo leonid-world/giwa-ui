@@ -29,7 +29,8 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const actionStage = ref('')
 const lastTxHash = ref('')
-const isLoading = ref(false)
+const isLoading = ref(true)
+const hasLoadedObligations = ref(false)
 const isActionRunning = ref(false)
 
 const currentCompanyId = computed(() => authStore.user?.companyId)
@@ -74,8 +75,12 @@ onMounted(loadPage)
 async function loadPage() {
   clearMessages()
   isLoading.value = true
+  hasLoadedObligations.value = false
+  readiness.value = null
+  receivableStore.clearSelection()
   try {
     await Promise.all([authStore.loadUser(), walletStore.loadWallet(), receivableStore.loadAll()])
+    hasLoadedObligations.value = true
     pendingSync.value = readPendingSynchronization(currentCompanyId.value)
 
     if (pendingSync.value?.type === 'repaid') {
@@ -557,14 +562,21 @@ function shortAddress(value) {
       {{ actionStage }}
     </p>
 
-    <section class="workspace">
+    <section class="workspace" :aria-busy="isLoading">
       <aside class="opportunity-panel">
         <h2>상환 대상 채권</h2>
-        <p v-if="!repaymentObligations.length" class="empty">
+        <p v-if="isLoading" class="empty loading-state" role="status">
+          Buyer 상환 대상 채권을 불러오고 있습니다...
+        </p>
+        <p v-else-if="!hasLoadedObligations" class="empty">
+          상단의 조회 오류를 확인한 뒤 최신 상태를 다시 조회해 주세요.
+        </p>
+        <p v-else-if="!repaymentObligations.length" class="empty">
           현재 Buyer가 상환할 FUNDED 채권이 없습니다.
         </p>
         <button
           v-for="receivable in repaymentObligations"
+          v-show="hasLoadedObligations && !isLoading"
           :key="receivable.receivableId"
           type="button"
           class="opportunity-card"
@@ -581,7 +593,12 @@ function shortAddress(value) {
         </button>
       </aside>
 
-      <article v-if="selectedReceivable" class="detail-panel">
+      <article v-if="isLoading" class="detail-panel empty-detail loading-state" role="status">
+        <h2>상환 정보 확인 중</h2>
+        <p>Buyer 상환 대상과 온체인 상태를 안전하게 확인하고 있습니다...</p>
+      </article>
+
+      <article v-else-if="hasLoadedObligations && selectedReceivable" class="detail-panel">
         <div class="detail-heading">
           <div>
             <span class="status">{{ selectedReceivable.status }}</span>
@@ -727,8 +744,14 @@ function shortAddress(value) {
       </article>
 
       <article v-else class="detail-panel empty-detail">
-        <h2>상환 대상 없음</h2>
-        <p>제3자 Funder의 자금 공급과 DB FUNDED 동기화가 완료되면 이 화면에 표시됩니다.</p>
+        <h2>{{ hasLoadedObligations ? '상환 대상 없음' : '상환 대상 조회 실패' }}</h2>
+        <p>
+          {{
+            hasLoadedObligations
+              ? '제3자 Funder의 자금 공급과 DB FUNDED 동기화가 완료되면 이 화면에 표시됩니다.'
+              : '상단의 오류 안내를 확인한 뒤 최신 상태를 다시 조회해 주세요.'
+          }}
+        </p>
       </article>
     </section>
   </main>
@@ -942,8 +965,17 @@ button:disabled {
 }
 
 .empty {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #e1e9e5;
+  border-radius: 10px;
+  background: #f8fbf9;
   color: #77877f;
   line-height: 1.6;
+}
+
+.loading-state {
+  color: #315548;
 }
 
 .detail-panel {

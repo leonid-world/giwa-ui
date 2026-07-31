@@ -8,7 +8,8 @@ const router = useRouter()
 const auth = useAuthStore()
 const wallet = useWalletStore()
 
-const isLoading = ref(false)
+const isLoading = ref(true)
+const isWalletLoading = ref(false)
 const profileError = ref('')
 const walletError = ref('')
 const copyMessage = ref('')
@@ -42,10 +43,13 @@ async function loadProfile() {
 
 async function loadWallet() {
   walletError.value = ''
+  isWalletLoading.value = true
   try {
     await wallet.loadWallet()
   } catch (error) {
     walletError.value = error?.message ?? '회사 지갑 정보를 불러오지 못했습니다.'
+  } finally {
+    isWalletLoading.value = false
   }
 }
 
@@ -70,12 +74,14 @@ async function logout() {
   <main class="profile-page">
     <section class="profile-shell">
       <header class="profile-heading">
-        <p class="eyebrow">MY INFORMATION</p>
+        <p class="eyebrow">GIWA RECEIVABLE FINANCE</p>
         <h1>내 정보</h1>
         <p>현재 로그인 계정과 이 회사에 연결된 지갑을 확인할 수 있습니다.</p>
       </header>
 
-      <p v-if="isLoading" class="notice" role="status">내 정보를 불러오고 있습니다...</p>
+      <p v-if="isLoading" class="notice loading-state" role="status">
+        내 정보를 불러오고 있습니다...
+      </p>
 
       <div v-else-if="profileError" class="notice error" role="alert">
         <span>{{ profileError }}</span>
@@ -106,12 +112,15 @@ async function logout() {
                 <span class="card-label">회사 지갑</span>
                 <h2>MetaMask 연결</h2>
               </div>
-              <span class="status" :class="{ connected: wallet.isConnected }">
-                {{ wallet.isConnected ? '연결됨' : '미연결' }}
+              <span class="status" :class="{ connected: wallet.isConnected && !isWalletLoading }">
+                {{ isWalletLoading ? '확인 중' : wallet.isConnected ? '연결됨' : '미연결' }}
               </span>
             </div>
 
-            <div v-if="walletError" class="wallet-error" role="alert">
+            <p v-if="isWalletLoading" class="empty-wallet loading-state" role="status">
+              회사 지갑 정보를 불러오고 있습니다...
+            </p>
+            <div v-else-if="walletError" class="wallet-error" role="alert">
               <p>{{ walletError }}</p>
               <button class="text-button" type="button" @click="loadWallet">다시 조회</button>
             </div>
@@ -281,6 +290,11 @@ button:hover {
 button:focus-visible {
   outline: 3px solid rgba(11, 118, 84, 0.3);
   outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .copy-button {

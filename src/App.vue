@@ -35,8 +35,9 @@ watch(
 </script>
 
 <template>
-  <div :class="{ 'authenticated-shell': showAuthenticatedLayout }">
-    <header v-if="showAuthenticatedLayout" class="session-bar" aria-label="현재 로그인 사용자">
+  <div class="app-shell" :class="{ 'authenticated-shell': showAuthenticatedLayout }">
+    <a class="skip-link" href="#main-content">본문 바로가기</a>
+    <header v-if="showAuthenticatedLayout" class="session-bar" aria-label="애플리케이션 헤더">
       <div class="session-bar__inner">
         <RouterLink class="app-brand" :to="{ name: 'dashboard' }">
           <span>GIWA</span>
@@ -60,17 +61,51 @@ watch(
         </RouterLink>
       </div>
     </header>
-    <div :class="{ 'authenticated-route': showAuthenticatedLayout }">
+    <div
+      id="main-content"
+      class="app-route"
+      :class="{ 'authenticated-route': showAuthenticatedLayout }"
+      tabindex="-1"
+    >
       <RouterView />
     </div>
+    <footer class="app-footer">
+      <div class="app-footer__inner">
+        <strong>GIWA Receivable Finance</strong>
+        <span>GIWA Sepolia · Hackathon MVP · 데모 전용</span>
+      </div>
+    </footer>
   </div>
 </template>
 
 <style>
-.authenticated-shell {
+.app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.authenticated-shell {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 200;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #15352b;
+  color: #ffffff;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 0.16s ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }
 
 .session-bar {
@@ -192,12 +227,40 @@ watch(
   white-space: nowrap;
 }
 
+.app-route,
 .authenticated-route {
   min-height: 0;
 }
 
 .authenticated-shell .authenticated-route > main {
   min-height: 100%;
+}
+
+.app-shell:not(.authenticated-shell) .app-route > main {
+  min-height: 100%;
+}
+
+.app-footer {
+  border-top: 1px solid #dfe5e1;
+  background: #edf4f0;
+  color: #62736b;
+}
+
+.app-footer__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(calc(100% - 48px), 1180px);
+  min-height: 52px;
+  gap: 16px;
+  margin: 0 auto;
+  padding: 12px 0;
+  font-size: 12px;
+}
+
+.app-footer__inner strong {
+  color: #315548;
+  font-weight: 750;
 }
 
 @media (max-width: 900px) {
@@ -229,6 +292,13 @@ watch(
 
   .session-account strong {
     max-width: none;
+  }
+
+  .app-footer__inner {
+    width: min(calc(100% - 32px), 1180px);
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
   }
 }
 

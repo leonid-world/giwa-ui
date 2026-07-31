@@ -26,6 +26,8 @@ const actionStage = ref('')
 const lastTxHash = ref('')
 const pendingSync = ref(null)
 const isSubmitting = ref(false)
+const isPageLoading = ref(true)
+const hasLoadedReceivables = ref(false)
 const isRefreshing = ref(false)
 const isChainActionRunning = ref(false)
 const tokenizationJournalStatus = ref('idle')
@@ -128,8 +130,11 @@ async function loadPage() {
   clearMessages()
   resetTokenizationJournalCheck()
   buyerAttestationAccepted.value = false
+  isPageLoading.value = true
+  hasLoadedReceivables.value = false
   try {
     await Promise.all([authStore.loadUser(), walletStore.loadWallet(), receivableStore.loadAll()])
+    hasLoadedReceivables.value = true
     pendingSync.value = readPendingSynchronization(currentCompanyId.value)
     const recoveryRouteName = externalRecoveryRouteName(pendingSync.value)
     if (recoveryRouteName) {
@@ -166,6 +171,8 @@ async function loadPage() {
     await inspectSelectedTokenizationJournal()
   } catch (error) {
     errorMessage.value = error.message
+  } finally {
+    isPageLoading.value = false
   }
 }
 
@@ -1084,11 +1091,15 @@ function updateBuyerBusinessNumber(event) {
     <div class="content-grid">
       <section class="panel">
         <h2>채권 목록</h2>
-        <p v-if="!receivableStore.receivables.length" class="empty">
+        <p v-if="isPageLoading" class="empty loading-state" role="status">
+          채권 목록을 불러오고 있습니다...
+        </p>
+        <p v-else-if="hasLoadedReceivables && !receivableStore.receivables.length" class="empty">
           등록되거나 배정된 채권이 없습니다.
         </p>
         <button
           v-for="item in receivableStore.receivables"
+          v-show="!isPageLoading"
           :key="item.receivableId"
           class="receivable-row"
           :class="{
@@ -1115,7 +1126,10 @@ function updateBuyerBusinessNumber(event) {
 
       <section class="panel details">
         <h2>상세 정보</h2>
-        <template v-if="selectedReceivable">
+        <p v-if="isPageLoading" class="empty loading-state" role="status">
+          채권 상세 정보를 준비하고 있습니다...
+        </p>
+        <template v-else-if="selectedReceivable">
           <dl>
             <dt>채권 번호</dt>
             <dd>#{{ selectedReceivable.receivableId }}</dd>
@@ -1451,7 +1465,7 @@ function updateBuyerBusinessNumber(event) {
             </button>
           </div>
         </template>
-        <p v-else class="empty">목록에서 채권을 선택하세요.</p>
+        <p v-else-if="hasLoadedReceivables" class="empty">목록에서 채권을 선택하세요.</p>
       </section>
     </div>
   </main>
@@ -1730,8 +1744,17 @@ button:disabled {
 }
 
 .empty {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #e1e9e5;
+  border-radius: 10px;
+  background: #f8fbf9;
   color: #788a82;
   line-height: 1.6;
+}
+
+.loading-state {
+  color: #315548;
 }
 
 dl {

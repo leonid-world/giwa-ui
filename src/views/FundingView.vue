@@ -29,7 +29,8 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const actionStage = ref('')
 const lastTxHash = ref('')
-const isLoading = ref(false)
+const isLoading = ref(true)
+const hasLoadedOpportunities = ref(false)
 const isActionRunning = ref(false)
 
 const opportunities = computed(() => receivableStore.fundingOpportunities)
@@ -78,12 +79,16 @@ onMounted(loadPage)
 async function loadPage() {
   clearMessages()
   isLoading.value = true
+  hasLoadedOpportunities.value = false
+  readiness.value = null
+  receivableStore.clearSelection()
   try {
     await Promise.all([
       authStore.loadUser(),
       walletStore.loadWallet(),
       receivableStore.loadFundingOpportunities(),
     ])
+    hasLoadedOpportunities.value = true
     pendingSync.value = readPendingSynchronization(currentCompanyId.value)
 
     if (pendingSync.value?.type === 'funded') {
@@ -561,14 +566,21 @@ function shortAddress(value) {
       {{ actionStage }}
     </p>
 
-    <section class="workspace">
+    <section class="workspace" :aria-busy="isLoading">
       <aside class="opportunity-panel">
         <h2>펀딩 가능 채권</h2>
-        <p v-if="!opportunities.length" class="empty">
+        <p v-if="isLoading" class="empty loading-state" role="status">
+          펀딩 가능 채권을 불러오고 있습니다...
+        </p>
+        <p v-else-if="!hasLoadedOpportunities" class="empty">
+          상단의 조회 오류를 확인한 뒤 최신 상태를 다시 조회해 주세요.
+        </p>
+        <p v-else-if="!opportunities.length" class="empty">
           현재 펀딩 가능한 TOKENIZED 채권이 없습니다.
         </p>
         <button
           v-for="receivable in opportunities"
+          v-show="hasLoadedOpportunities && !isLoading"
           :key="receivable.receivableId"
           type="button"
           class="opportunity-card"
@@ -585,7 +597,12 @@ function shortAddress(value) {
         </button>
       </aside>
 
-      <article v-if="selectedReceivable" class="detail-panel">
+      <article v-if="isLoading" class="detail-panel empty-detail loading-state" role="status">
+        <h2>펀딩 정보 확인 중</h2>
+        <p>채권과 기존 트랜잭션 상태를 안전하게 확인하고 있습니다...</p>
+      </article>
+
+      <article v-else-if="hasLoadedOpportunities && selectedReceivable" class="detail-panel">
         <div class="detail-heading">
           <div>
             <span class="status">{{ selectedReceivable.status }}</span>
@@ -724,9 +741,13 @@ function shortAddress(value) {
       </article>
 
       <article v-else class="detail-panel empty-detail">
-        <h2>펀딩 대상 없음</h2>
+        <h2>{{ hasLoadedOpportunities ? '펀딩 대상 없음' : '펀딩 대상 조회 실패' }}</h2>
         <p>
-          Seller의 Buyer 검증과 NFT 민팅이 완료된 TOKENIZED 채권이 등록되면 이 화면에 표시됩니다.
+          {{
+            hasLoadedOpportunities
+              ? 'Seller의 Buyer 검증과 NFT 민팅이 완료된 TOKENIZED 채권이 등록되면 이 화면에 표시됩니다.'
+              : '상단의 오류 안내를 확인한 뒤 최신 상태를 다시 조회해 주세요.'
+          }}
         </p>
       </article>
     </section>
@@ -941,8 +962,17 @@ button:disabled {
 }
 
 .empty {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #e1e9e5;
+  border-radius: 10px;
+  background: #f8fbf9;
   color: #77877f;
   line-height: 1.6;
+}
+
+.loading-state {
+  color: #315548;
 }
 
 .detail-panel {
