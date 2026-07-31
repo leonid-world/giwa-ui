@@ -27,6 +27,18 @@ const router = createRouter({
       component: () => import('../views/ReceivablesView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/funding',
+      name: 'funding',
+      component: () => import('../views/FundingView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/repayment',
+      name: 'repayment',
+      component: () => import('../views/RepaymentView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

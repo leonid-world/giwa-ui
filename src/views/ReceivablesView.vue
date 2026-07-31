@@ -1,7 +1,10 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { transactionExplorerUrl } from '../contracts/addresses'
+import {
+  addressExplorerUrl,
+  transactionExplorerUrl,
+} from '../contracts/addresses'
 import {
   createReceivableOnchain,
   resumeReceivableTransaction,
@@ -169,11 +172,23 @@ async function loadPage() {
     pendingSync.value = readPendingSynchronization(
       currentCompanyId.value,
     )
+    const recoveryRouteName = externalRecoveryRouteName(
+      pendingSync.value,
+    )
+    if (recoveryRouteName) {
+      await router.replace({ name: recoveryRouteName })
+      return
+    }
     if (pendingSync.value) {
       await receivableStore.loadOne(pendingSync.value.receivableId)
       lastTxHash.value = pendingSync.value.payload.txHash
     } else if (receivableStore.receivables.length) {
       const initialReceivable =
+        receivableStore.receivables.find(
+          (receivable) =>
+            isBuyerFor(receivable) &&
+            receivable.status === 'FUNDED',
+        ) ??
         receivableStore.receivables.find(
           (receivable) =>
             isBuyerFor(receivable) &&
@@ -242,6 +257,13 @@ async function selectReceivable(receivableId) {
 
 async function selectPendingReceivable() {
   if (!pendingSync.value) return
+  const recoveryRouteName = externalRecoveryRouteName(
+    pendingSync.value,
+  )
+  if (recoveryRouteName) {
+    await router.push({ name: recoveryRouteName })
+    return
+  }
   await selectReceivable(pendingSync.value.receivableId)
 }
 
@@ -752,6 +774,13 @@ function isCurrentTokenizationJournalRequest(
 
 async function retryPendingSync() {
   if (!pendingSync.value) return
+  const recoveryRouteName = externalRecoveryRouteName(
+    pendingSync.value,
+  )
+  if (recoveryRouteName) {
+    await router.push({ name: recoveryRouteName })
+    return
+  }
   clearMessages({ keepTransaction: true })
   isChainActionRunning.value = true
   try {
@@ -1062,6 +1091,12 @@ function isBuyerFor(receivable) {
   return sameId(currentCompanyId.value, receivable.buyerCompanyId)
 }
 
+function externalRecoveryRouteName(synchronization) {
+  if (synchronization?.type === 'funded') return 'funding'
+  if (synchronization?.type === 'repaid') return 'repayment'
+  return null
+}
+
 function counterpartyName(receivable) {
   return isBuyerFor(receivable)
     ? receivable.sellerCompanyName
@@ -1073,6 +1108,14 @@ function counterpartyRole(receivable) {
 }
 
 function receivableActionLabel(receivable) {
+  if (receivable.status === 'REPAID') {
+    return '상환 완료'
+  }
+  if (receivable.status === 'FUNDED') {
+    return isBuyerFor(receivable)
+      ? 'Buyer 상환 필요'
+      : 'Buyer 상환 대기'
+  }
   if (isBuyerFor(receivable) && receivable.status === 'CREATED') {
     return hasCompleteBlockchainMetadata(receivable)
       ? 'Buyer 검증 필요'
@@ -1308,6 +1351,8 @@ function updateBuyerBusinessNumber(event) {
             <dd>{{ selectedReceivable.sellerCompanyName }}</dd>
             <dt>Buyer</dt>
             <dd>{{ selectedReceivable.buyerCompanyName }}</dd>
+            <dt>Funder</dt>
+            <dd>{{ selectedReceivable.funderCompanyName || '-' }}</dd>
             <dt>채권 금액</dt>
             <dd>{{ formatAmount(selectedReceivable.faceValue) }} KRW</dd>
             <dt>펀딩 요청</dt>
@@ -1320,6 +1365,8 @@ function updateBuyerBusinessNumber(event) {
             <dd>{{ selectedReceivable.sellerWalletAddress }}</dd>
             <dt>Buyer 지갑</dt>
             <dd>{{ selectedReceivable.buyerWalletAddress }}</dd>
+            <dt>Funder 지갑</dt>
+            <dd>{{ selectedReceivable.funderWalletAddress || '-' }}</dd>
             <dt>문서 해시</dt>
             <dd>{{ selectedReceivable.documentHash || '등록되지 않음' }}</dd>
             <dt>상태</dt>
@@ -1327,15 +1374,91 @@ function updateBuyerBusinessNumber(event) {
             <dt>온체인 ID</dt>
             <dd>{{ selectedReceivable.onchainReceivableId || '-' }}</dd>
             <dt>컨트랙트</dt>
-            <dd>{{ selectedReceivable.contractAddress || '-' }}</dd>
+            <dd class="chain-reference">
+              <span>{{ selectedReceivable.contractAddress || '-' }}</span>
+              <a
+                v-if="addressExplorerUrl(selectedReceivable.contractAddress)"
+                class="explorer-button"
+                :href="addressExplorerUrl(selectedReceivable.contractAddress)"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="컨트랙트 주소를 익스플로러에서 보기"
+              >
+                익스플로러
+              </a>
+            </dd>
             <dt>생성 Tx</dt>
-            <dd>{{ selectedReceivable.createTxHash || '-' }}</dd>
+            <dd class="chain-reference">
+              <span>{{ selectedReceivable.createTxHash || '-' }}</span>
+              <a
+                v-if="transactionExplorerUrl(selectedReceivable.createTxHash)"
+                class="explorer-button"
+                :href="transactionExplorerUrl(selectedReceivable.createTxHash)"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="채권 생성 트랜잭션을 익스플로러에서 보기"
+              >
+                익스플로러
+              </a>
+            </dd>
             <dt>검증 Tx</dt>
-            <dd>{{ selectedReceivable.verifyTxHash || '-' }}</dd>
+            <dd class="chain-reference">
+              <span>{{ selectedReceivable.verifyTxHash || '-' }}</span>
+              <a
+                v-if="transactionExplorerUrl(selectedReceivable.verifyTxHash)"
+                class="explorer-button"
+                :href="transactionExplorerUrl(selectedReceivable.verifyTxHash)"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Buyer 검증 트랜잭션을 익스플로러에서 보기"
+              >
+                익스플로러
+              </a>
+            </dd>
             <dt>NFT 토큰 ID</dt>
             <dd>{{ selectedReceivable.tokenId || '-' }}</dd>
             <dt>토큰화 Tx</dt>
-            <dd>{{ selectedReceivable.tokenizeTxHash || '-' }}</dd>
+            <dd class="chain-reference">
+              <span>{{ selectedReceivable.tokenizeTxHash || '-' }}</span>
+              <a
+                v-if="transactionExplorerUrl(selectedReceivable.tokenizeTxHash)"
+                class="explorer-button"
+                :href="transactionExplorerUrl(selectedReceivable.tokenizeTxHash)"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="NFT 토큰화 트랜잭션을 익스플로러에서 보기"
+              >
+                익스플로러
+              </a>
+            </dd>
+            <dt>펀딩 Tx</dt>
+            <dd class="chain-reference">
+              <span>{{ selectedReceivable.fundingTxHash || '-' }}</span>
+              <a
+                v-if="transactionExplorerUrl(selectedReceivable.fundingTxHash)"
+                class="explorer-button"
+                :href="transactionExplorerUrl(selectedReceivable.fundingTxHash)"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="자금 공급 트랜잭션을 익스플로러에서 보기"
+              >
+                익스플로러
+              </a>
+            </dd>
+            <dt>상환 Tx</dt>
+            <dd class="chain-reference">
+              <span>{{ selectedReceivable.repayTxHash || '-' }}</span>
+              <a
+                v-if="transactionExplorerUrl(selectedReceivable.repayTxHash)"
+                class="explorer-button"
+                :href="transactionExplorerUrl(selectedReceivable.repayTxHash)"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Buyer 상환 트랜잭션을 익스플로러에서 보기"
+              >
+                익스플로러
+              </a>
+            </dd>
             <dt>설명</dt>
             <dd>{{ selectedReceivable.description || '-' }}</dd>
           </dl>
@@ -1501,6 +1624,20 @@ function updateBuyerBusinessNumber(event) {
               채권 NFT 민팅이 완료되었습니다. Funder 자금 공급을 기다리고
               있습니다.
             </p>
+            <p
+              v-else-if="
+                isBuyer && selectedReceivable.status === 'FUNDED'
+              "
+            >
+              Funder 자금 공급이 완료되었습니다. Buyer 지갑으로 채권 금액을
+              상환해 주세요.
+            </p>
+            <p v-else-if="selectedReceivable.status === 'FUNDED'">
+              Funder 자금 공급이 완료되었습니다. Buyer 상환을 기다리고 있습니다.
+            </p>
+            <p v-else-if="selectedReceivable.status === 'REPAID'">
+              Buyer 상환이 완료되었습니다. 채권 상태가 REPAID로 기록되었습니다.
+            </p>
             <p v-else>
               현재 계정에서 실행할 생성·검증 작업이 없습니다.
             </p>
@@ -1552,6 +1689,15 @@ function updateBuyerBusinessNumber(event) {
                   ? 'NFT 민팅 확인 중...'
                   : 'Seller 지갑으로 채권 NFT 민팅'
               }}
+            </button>
+            <button
+              v-if="
+                isBuyer && selectedReceivable.status === 'FUNDED'
+              "
+              type="button"
+              @click="router.push({ name: 'repayment' })"
+            >
+              Buyer 채권 상환 화면으로 이동
             </button>
           </div>
 
@@ -1774,6 +1920,38 @@ dt {
 dd {
   color: #15352b;
   overflow-wrap: anywhere;
+}
+.chain-reference {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.chain-reference span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.explorer-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid #0b7654;
+  border-radius: 7px;
+  background: white;
+  color: #0b7654;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+}
+.explorer-button:hover {
+  background: #eaf6ef;
+}
+.explorer-button:focus-visible {
+  outline: 2px solid #0b7654;
+  outline-offset: 2px;
 }
 .review-card {
   display: grid;

@@ -85,7 +85,13 @@ function logout() {
           :disabled="isSelecting"
           @click="selectWalletAccount"
         >
-          {{ isSelecting ? 'MetaMask 확인 중...' : wallet.isConnected ? '다른 계정 선택' : 'MetaMask 계정 선택' }}
+          {{
+            isSelecting
+              ? 'MetaMask 확인 중...'
+              : wallet.isConnected
+                ? '다른 계정 선택'
+                : 'MetaMask 계정 선택'
+          }}
         </button>
 
         <div
@@ -99,7 +105,12 @@ function logout() {
             <button type="button" :disabled="isConnecting" @click="confirmWalletConnection">
               {{ isConnecting ? '연결 중...' : '이 지갑 연결' }}
             </button>
-            <button class="secondary" type="button" :disabled="isSelecting" @click="selectWalletAccount">
+            <button
+              class="secondary"
+              type="button"
+              :disabled="isSelecting"
+              @click="selectWalletAccount"
+            >
               다른 계정 선택
             </button>
             <button class="text-button" type="button" @click="cancelWalletSelection">취소</button>
@@ -110,19 +121,44 @@ function logout() {
       <div v-if="errorCode === 'WALLET_ALREADY_MAPPED'" class="conflict-alert" role="alert">
         <strong>이미 등록된 MetaMask 지갑입니다.</strong>
         <p>{{ wallet.pendingWalletAddress }}</p>
-        <p>이 주소는 다른 회사에서 사용 중입니다. 해당 회사용으로 분리된 MetaMask 계정을 선택해 주세요.</p>
+        <p>
+          이 주소는 다른 회사에서 사용 중입니다. 해당 회사용으로 분리된 MetaMask 계정을 선택해
+          주세요.
+        </p>
         <div class="confirmation-actions">
           <button type="button" :disabled="isSelecting" @click="selectWalletAccount">
             {{ isSelecting ? 'MetaMask 확인 중...' : '다른 계정 선택' }}
           </button>
-          <button class="text-button danger" type="button" @click="cancelWalletSelection">닫기</button>
+          <button class="text-button danger" type="button" @click="cancelWalletSelection">
+            닫기
+          </button>
         </div>
       </div>
       <p v-else-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
       <p v-if="successMessage" class="success" role="status">{{ successMessage }}</p>
-      <button type="button" :disabled="!wallet.isConnected" @click="router.push({ name: 'receivables' })">
-        매출채권 관리
-      </button>
+      <div class="service-actions">
+        <button
+          type="button"
+          :disabled="!wallet.isConnected"
+          @click="router.push({ name: 'receivables' })"
+        >
+          매출채권 관리
+        </button>
+        <button
+          type="button"
+          :disabled="!wallet.isConnected"
+          @click="router.push({ name: 'funding' })"
+        >
+          토큰화 채권 펀딩
+        </button>
+        <button
+          type="button"
+          :disabled="!wallet.isConnected"
+          @click="router.push({ name: 'repayment' })"
+        >
+          매출채권 상환
+        </button>
+      </div>
       <button type="button" @click="logout">로그아웃</button>
     </section>
   </main>
@@ -236,5 +272,13 @@ button:disabled {
 .success {
   margin-top: 16px;
   color: #0b7654;
+}
+.service-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.service-actions button {
+  flex: 1 1 180px;
 }
 </style>

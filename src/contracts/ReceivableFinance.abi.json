@@ -19,5 +19,6 @@
   "event ReceivableVerified(uint256 indexed receivableId, address indexed buyer)",
   "event ReceivableTokenized(uint256 indexed receivableId, uint256 indexed tokenId, address indexed custodian)",
   "event ReceivableFunded(uint256 indexed receivableId, uint256 indexed tokenId, address indexed funder, address seller, uint256 fundingAmount)",
-  "event ReceivableRepaid(uint256 indexed receivableId, uint256 indexed tokenId, address indexed buyer, address recipient, uint256 faceValue)"
+  "event ReceivableRepaid(uint256 indexed receivableId, uint256 indexed tokenId, address indexed buyer, address recipient, uint256 faceValue)",
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
 ]

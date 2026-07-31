@@ -12,3 +12,8 @@ export function transactionExplorerUrl(txHash) {
   if (!giwaContractConfig.explorerUrl || !txHash) return ''
   return `${giwaContractConfig.explorerUrl}/tx/${txHash}`
 }
+
+export function addressExplorerUrl(address) {
+  if (!giwaContractConfig.explorerUrl || !address) return ''
+  return `${giwaContractConfig.explorerUrl}/address/${address}`
+}
