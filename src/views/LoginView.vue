@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ArrowRight, CircleAlert, Landmark, LoaderCircle, LogIn, UserPlus } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { formatBusinessNumber, normalizeBusinessNumber } from '../utils/businessNumber'
 
@@ -49,9 +50,16 @@ function updateBusinessNumber(event) {
 <template>
   <main class="auth-page">
     <section class="auth-card">
-      <p class="eyebrow">GIWA RECEIVABLE FINANCE</p>
-      <h1>{{ isSignup ? '계정을 만드세요' : '다시 오셨군요' }}</h1>
-      <p class="description">매출채권 금융을 관리하려면 로그인하세요.</p>
+      <header class="auth-heading">
+        <div class="auth-brand" aria-label="GIWA Receivable Finance">
+          <span class="auth-brand__mark" aria-hidden="true">
+            <Landmark :size="20" :stroke-width="2" />
+          </span>
+          <span>GIWA Receivable Finance</span>
+        </div>
+        <h1>{{ isSignup ? '계정을 만드세요' : '다시 오셨군요' }}</h1>
+        <p class="description">매출채권 금융을 관리하려면 로그인하세요.</p>
+      </header>
 
       <form :aria-busy="isSubmitting" @submit.prevent="submit">
         <label>
@@ -92,14 +100,21 @@ function updateBusinessNumber(event) {
             />
           </label>
         </template>
-        <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
+        <div v-if="errorMessage" class="error" role="alert">
+          <CircleAlert aria-hidden="true" :size="18" />
+          <span>{{ errorMessage }}</span>
+        </div>
         <button type="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? '처리 중...' : isSignup ? '회원가입' : '로그인' }}
+          <LoaderCircle v-if="isSubmitting" class="button-spinner" aria-hidden="true" :size="18" />
+          <UserPlus v-else-if="isSignup" aria-hidden="true" :size="18" />
+          <LogIn v-else aria-hidden="true" :size="18" />
+          <span>{{ isSubmitting ? '처리 중...' : isSignup ? '회원가입' : '로그인' }}</span>
         </button>
       </form>
 
       <button class="text-button" type="button" :disabled="isSubmitting" @click="toggleMode">
-        {{ isSignup ? '이미 계정이 있으신가요? 로그인' : '처음이신가요? 회원가입' }}
+        <span>{{ isSignup ? '이미 계정이 있으신가요? 로그인' : '처음이신가요? 회원가입' }}</span>
+        <ArrowRight aria-hidden="true" :size="16" />
       </button>
     </section>
   </main>
@@ -110,100 +125,111 @@ function updateBusinessNumber(event) {
   min-height: 100%;
   display: grid;
   place-items: center;
-  padding: clamp(24px, 5vw, 48px);
+  padding: var(--space-8) var(--space-3);
 }
 
 .auth-card {
-  width: min(100%, 420px);
-  padding: 40px;
-  border: 1px solid #dce5e0;
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 18px 48px rgba(24, 62, 48, 0.09);
+  width: min(100%, 400px);
 }
 
-.eyebrow {
-  margin: 0;
-  color: #0b7654;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
+.auth-heading {
+  margin-bottom: var(--space-4);
+}
+
+.auth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.auth-brand__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--color-brand);
+  color: #ffffff;
 }
 
 h1 {
-  margin: 8px 0 0;
-  color: #15352b;
-  font-size: 30px;
-  font-weight: 750;
+  margin: var(--space-3) 0 0;
+  color: var(--color-text);
+  font-size: 32px;
+  font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.02em;
 }
 
 .description {
-  margin: 8px 0 28px;
-  color: #62736b;
-  line-height: 1.6;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 form,
 label {
   display: grid;
-  gap: 8px;
+  gap: var(--space-1);
 }
 
 form {
-  gap: 18px;
+  gap: var(--space-2);
 }
 
 label {
-  color: #27463b;
+  color: var(--color-text);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 input {
   width: 100%;
-  min-height: 46px;
-  padding: 11px 12px;
-  border: 1px solid #b8c7c0;
-  border-radius: 9px;
+  min-height: 48px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
   outline: none;
-  background: #fbfdfc;
-  color: #15352b;
+  background: var(--color-surface);
+  color: var(--color-text);
   transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    background-color 0.16s ease;
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 input:hover {
-  border-color: #8fa69b;
-  background: #ffffff;
+  border-color: #9ca9a3;
 }
 
 input:focus {
-  border-color: #0b7654;
-  background: #ffffff;
+  border-color: var(--color-brand);
   box-shadow: 0 0 0 3px rgba(11, 118, 84, 0.12);
 }
 
 button {
-  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 48px;
   border: 0;
-  border-radius: 9px;
-  padding: 11px 16px;
-  background: #0b7654;
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-brand);
   color: white;
   cursor: pointer;
-  font-weight: 700;
+  font-weight: 600;
   transition:
-    background-color 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease;
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 button:hover:not(:disabled) {
-  background: #075f44;
+  background: var(--color-brand-hover);
 }
 
 button:focus-visible {
@@ -218,33 +244,53 @@ button:disabled {
 
 .text-button {
   width: 100%;
-  margin-top: 14px;
+  min-height: 40px;
+  margin-top: var(--space-1);
   background: transparent;
-  color: #0b7654;
+  color: var(--color-brand);
+  font-size: 14px;
 }
 
 .text-button:hover:not(:disabled) {
-  background: #edf6f1;
+  background: var(--color-brand-soft);
 }
 
 .error {
-  margin: -2px 0 0;
-  padding: 11px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-2);
   border: 1px solid #efc0c0;
-  border-radius: 9px;
-  background: #fff5f5;
+  border-radius: var(--radius-md);
+  background: #fffafa;
   color: #a32323;
   font-size: 14px;
   line-height: 1.5;
 }
 
+.error svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.button-spinner {
+  animation: giwa-loading-spin 0.8s linear infinite;
+}
+
 @media (max-width: 520px) {
   .auth-page {
-    padding: 16px;
+    padding: var(--space-5) var(--space-2);
   }
 
   .auth-card {
-    padding: 30px 22px;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button-spinner {
+    animation: none;
   }
 }
 </style>

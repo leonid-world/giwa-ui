@@ -1,4 +1,21 @@
 <script setup>
+import {
+  Box,
+  Check,
+  CircleCheckBig,
+  Database,
+  ExternalLink,
+  FilePlus,
+  HandCoins,
+  LayoutDashboard,
+  LoaderCircle,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  TriangleAlert,
+  X,
+} from '@lucide/vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { addressExplorerUrl, transactionExplorerUrl } from '../contracts/addresses'
@@ -123,6 +140,77 @@ const pendingSyncForSelected = computed(
     selectedReceivable.value &&
     sameId(pendingSync.value.receivableId, selectedReceivable.value.receivableId),
 )
+
+const workflowSteps = [
+  {
+    key: 'CREATED',
+    title: '온체인 생성',
+    description: 'Seller가 채권 정보를 GIWA 컨트랙트에 등록합니다.',
+    icon: FilePlus,
+    pendingType: 'chain-created',
+  },
+  {
+    key: 'VERIFIED',
+    title: 'Buyer 검증',
+    description: 'Buyer가 거래 조건과 증빙을 확인하고 지갑으로 서명합니다.',
+    icon: ShieldCheck,
+    pendingType: 'verified',
+  },
+  {
+    key: 'TOKENIZED',
+    title: 'NFT 토큰화',
+    description: '검증된 채권을 Seller 지갑에서 NFT로 민팅합니다.',
+    icon: Box,
+    pendingType: 'tokenized',
+  },
+  {
+    key: 'FUNDED',
+    title: '자금 공급',
+    description: 'Funder가 mKRW로 채권에 자금을 공급합니다.',
+    icon: HandCoins,
+  },
+  {
+    key: 'REPAID',
+    title: '상환',
+    description: 'Buyer가 채권 금액을 상환해 거래를 완료합니다.',
+    icon: CircleCheckBig,
+  },
+]
+
+const currentWorkflowStep = computed(
+  () => workflowSteps.find((step) => !isWorkflowMilestoneComplete(step.key))?.key ?? null,
+)
+
+function isWorkflowMilestoneComplete(step) {
+  const status = selectedReceivable.value?.status
+  if (!status) return false
+
+  if (step === 'CREATED') {
+    return (
+      hasCompleteChainMetadata.value ||
+      ['VERIFIED', 'TOKENIZED', 'FUNDED', 'REPAID'].includes(status)
+    )
+  }
+  if (step === 'VERIFIED') {
+    return ['VERIFIED', 'TOKENIZED', 'FUNDED', 'REPAID'].includes(status)
+  }
+  if (step === 'TOKENIZED') {
+    return ['TOKENIZED', 'FUNDED', 'REPAID'].includes(status)
+  }
+  if (step === 'FUNDED') {
+    return ['FUNDED', 'REPAID'].includes(status)
+  }
+  return status === 'REPAID'
+}
+
+function workflowStepState(step) {
+  if (isWorkflowMilestoneComplete(step)) return 'complete'
+  return currentWorkflowStep.value === step ? 'current' : 'pending'
+}
+
+function pendingSyncMatches(type) {
+  return Boolean(pendingSyncForSelected.value && pendingSync.value?.type === type)
+}
 
 onMounted(loadPage)
 
@@ -1004,32 +1092,39 @@ function updateBuyerBusinessNumber(event) {
 
 <template>
   <main class="receivables-page">
-    <header>
+    <header class="page-header">
       <div>
-        <p class="eyebrow">GIWA RECEIVABLE FINANCE</p>
+        <p class="eyebrow">채권 관리</p>
         <h1>매출채권</h1>
       </div>
       <div class="header-actions">
         <button class="secondary" type="button" @click="router.push({ name: 'dashboard' })">
+          <LayoutDashboard :size="16" aria-hidden="true" />
           대시보드
         </button>
         <button type="button" @click="showForm = !showForm">
+          <X v-if="showForm" :size="16" aria-hidden="true" />
+          <Plus v-else :size="16" aria-hidden="true" />
           {{ showForm ? '등록 취소' : '새 채권 등록' }}
         </button>
       </div>
     </header>
 
     <p v-if="errorMessage" class="message error" role="alert">
+      <TriangleAlert :size="18" aria-hidden="true" />
       {{ errorMessage }}
     </p>
     <p v-if="successMessage" class="message success" role="status">
+      <CircleCheckBig :size="18" aria-hidden="true" />
       {{ successMessage }}
     </p>
     <p v-if="actionStage" class="message pending" aria-live="polite">
+      <LoaderCircle class="spinning" :size="18" aria-hidden="true" />
       {{ actionStage }}
     </p>
     <p v-if="lastTxHash" class="message transaction">
-      트랜잭션: {{ lastTxHash }}
+      <ExternalLink :size="18" aria-hidden="true" />
+      <span>트랜잭션: {{ lastTxHash }}</span>
       <a
         v-if="transactionExplorerUrl(lastTxHash)"
         :href="transactionExplorerUrl(lastTxHash)"
@@ -1040,7 +1135,7 @@ function updateBuyerBusinessNumber(event) {
       </a>
     </p>
 
-    <section v-if="showForm" class="panel">
+    <section v-if="showForm" class="registration-section">
       <h2>매출채권 등록</h2>
       <form @submit.prevent="submit">
         <label>
@@ -1083,15 +1178,18 @@ function updateBuyerBusinessNumber(event) {
           <textarea v-model="form.description" maxlength="1000" rows="3"></textarea>
         </label>
         <button type="submit" :disabled="isSubmitting">
+          <LoaderCircle v-if="isSubmitting" class="spinning" :size="16" aria-hidden="true" />
+          <Database v-else :size="16" aria-hidden="true" />
           {{ isSubmitting ? '등록 중...' : 'DB에 등록' }}
         </button>
       </form>
     </section>
 
-    <div class="content-grid">
-      <section class="panel">
+    <div class="receivables-workspace">
+      <section class="list-pane">
         <h2>채권 목록</h2>
         <p v-if="isPageLoading" class="empty loading-state" role="status">
+          <LoaderCircle class="spinning" :size="18" aria-hidden="true" />
           채권 목록을 불러오고 있습니다...
         </p>
         <p v-else-if="hasLoadedReceivables && !receivableStore.receivables.length" class="empty">
@@ -1124,13 +1222,14 @@ function updateBuyerBusinessNumber(event) {
         </button>
       </section>
 
-      <section class="panel details">
+      <section class="detail-pane">
         <h2>상세 정보</h2>
         <p v-if="isPageLoading" class="empty loading-state" role="status">
+          <LoaderCircle class="spinning" :size="18" aria-hidden="true" />
           채권 상세 정보를 준비하고 있습니다...
         </p>
         <template v-else-if="selectedReceivable">
-          <dl>
+          <dl class="receivable-details">
             <dt>채권 번호</dt>
             <dd>#{{ selectedReceivable.receivableId }}</dd>
             <dt>Seller</dt>
@@ -1159,311 +1258,538 @@ function updateBuyerBusinessNumber(event) {
             </dd>
             <dt>상태</dt>
             <dd>{{ selectedReceivable.status }}</dd>
-            <dt>온체인 ID</dt>
-            <dd>{{ selectedReceivable.onchainReceivableId || '-' }}</dd>
-            <dt>컨트랙트</dt>
-            <dd class="chain-reference">
-              <span>{{ selectedReceivable.contractAddress || '-' }}</span>
-              <a
-                v-if="addressExplorerUrl(selectedReceivable.contractAddress)"
-                class="explorer-button"
-                :href="addressExplorerUrl(selectedReceivable.contractAddress)"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="컨트랙트 주소를 익스플로러에서 보기"
-              >
-                익스플로러
-              </a>
-            </dd>
-            <dt>생성 Tx</dt>
-            <dd class="chain-reference">
-              <span>{{ selectedReceivable.createTxHash || '-' }}</span>
-              <a
-                v-if="transactionExplorerUrl(selectedReceivable.createTxHash)"
-                class="explorer-button"
-                :href="transactionExplorerUrl(selectedReceivable.createTxHash)"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="채권 생성 트랜잭션을 익스플로러에서 보기"
-              >
-                익스플로러
-              </a>
-            </dd>
-            <dt>검증 Tx</dt>
-            <dd class="chain-reference">
-              <span>{{ selectedReceivable.verifyTxHash || '-' }}</span>
-              <a
-                v-if="transactionExplorerUrl(selectedReceivable.verifyTxHash)"
-                class="explorer-button"
-                :href="transactionExplorerUrl(selectedReceivable.verifyTxHash)"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Buyer 검증 트랜잭션을 익스플로러에서 보기"
-              >
-                익스플로러
-              </a>
-            </dd>
-            <dt>NFT 토큰 ID</dt>
-            <dd>{{ selectedReceivable.tokenId || '-' }}</dd>
-            <dt>토큰화 Tx</dt>
-            <dd class="chain-reference">
-              <span>{{ selectedReceivable.tokenizeTxHash || '-' }}</span>
-              <a
-                v-if="transactionExplorerUrl(selectedReceivable.tokenizeTxHash)"
-                class="explorer-button"
-                :href="transactionExplorerUrl(selectedReceivable.tokenizeTxHash)"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="NFT 토큰화 트랜잭션을 익스플로러에서 보기"
-              >
-                익스플로러
-              </a>
-            </dd>
-            <dt>펀딩 Tx</dt>
-            <dd class="chain-reference">
-              <span>{{ selectedReceivable.fundingTxHash || '-' }}</span>
-              <a
-                v-if="transactionExplorerUrl(selectedReceivable.fundingTxHash)"
-                class="explorer-button"
-                :href="transactionExplorerUrl(selectedReceivable.fundingTxHash)"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="자금 공급 트랜잭션을 익스플로러에서 보기"
-              >
-                익스플로러
-              </a>
-            </dd>
-            <dt>상환 Tx</dt>
-            <dd class="chain-reference">
-              <span>{{ selectedReceivable.repayTxHash || '-' }}</span>
-              <a
-                v-if="transactionExplorerUrl(selectedReceivable.repayTxHash)"
-                class="explorer-button"
-                :href="transactionExplorerUrl(selectedReceivable.repayTxHash)"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Buyer 상환 트랜잭션을 익스플로러에서 보기"
-              >
-                익스플로러
-              </a>
-            </dd>
             <dt>설명</dt>
             <dd>{{ selectedReceivable.description || '-' }}</dd>
           </dl>
 
-          <section
-            v-if="buyerReviewRequired"
-            class="review-card"
-            aria-labelledby="buyer-review-title"
-          >
-            <div>
-              <p class="review-eyebrow">BUYER REVIEW</p>
-              <h3 id="buyer-review-title">채권 내용 확인 및 검증</h3>
+          <section class="workflow-section" aria-labelledby="workflow-title">
+            <div class="section-heading">
+              <div>
+                <p class="section-eyebrow">블록체인 워크플로</p>
+                <h3 id="workflow-title">채권 진행 단계</h3>
+              </div>
+              <span class="current-status">{{ selectedReceivable.status }}</span>
             </div>
-            <p>
-              온체인은 실제 거래 사실을 자동으로 판단하지 않습니다. 위의 거래 조건을 확인한 Buyer
-              회사의 지갑 서명이 채무 확인 증거로 기록됩니다.
-            </p>
-            <ul class="review-checklist">
-              <li>Seller와 Buyer 회사 및 등록 지갑이 올바른지 확인</li>
-              <li>채권 금액, 펀딩 요청 금액, 발행일과 만기일 확인</li>
-              <li>설명과 문서 해시가 실제 거래 증빙과 일치하는지 확인</li>
-            </ul>
-            <p v-if="!hasCompleteChainMetadata" class="review-prerequisite" role="status">
-              지금 채권 내용을 검토할 수 있습니다. MetaMask 서명은 Seller가 미검증 채권을 GIWA에
-              생성한 뒤 활성화됩니다.
-            </p>
-            <p v-else class="review-ready" role="status">
-              Seller의 GIWA 생성이 완료되었습니다. 서명 직전에 화면 정보와 온체인 CREATED 데이터를
-              다시 대조합니다.
-            </p>
-            <label class="attestation">
-              <input
-                v-model="buyerAttestationAccepted"
-                type="checkbox"
-                :disabled="isChainActionRunning || Boolean(pendingSync)"
-              />
-              <span>
-                위 거래 조건과 증빙을 확인했으며, Buyer 회사로서 해당 채무 내용을 확인합니다.
-              </span>
-            </label>
-            <div class="review-actions">
-              <button
-                class="secondary"
-                type="button"
-                :disabled="isRefreshing || isChainActionRunning"
-                @click="refreshSelectedReceivable"
-              >
-                {{ isRefreshing ? '불러오는 중...' : '상태 새로고침' }}
-              </button>
-              <button type="button" :disabled="!canSubmitVerification" @click="verifyOnchain">
-                {{ buyerVerificationButtonText }}
-              </button>
-            </div>
-          </section>
 
-          <div class="workflow-card">
-            <strong>현재 단계</strong>
-            <p v-if="pendingSyncForSelected && pendingSync.phase === 'submitted'">
-              <template v-if="pendingSync.recoveredFromServerJournal">
-                서버 저널에서
-                {{
-                  pendingSync.pendingTransactionCount > 1
-                    ? `진행 중인 민팅 ${pendingSync.pendingTransactionCount}건`
-                    : '진행 중인 민팅'
-                }}을 확인했습니다. 새 민팅을 보내지 말고 아래 트랜잭션의 블록 확인을 이어받아
-                주세요. 서버 조회만으로는 nonce·교체 정보를 모두 복원할 수 없어 기존 해시를 기준으로
-                안전하게 확인합니다.
-              </template>
-              <template v-else>
-                트랜잭션이 GIWA에 제출되었습니다. 새 트랜잭션을 보내지 말고 기존 블록 확인을
-                이어받아 주세요.
-              </template>
-            </p>
-            <p v-else-if="pendingSyncForSelected">
-              <template v-if="pendingSync.recoveredFromServerJournal">
-                이미 CONFIRMED 처리된 NFT 민팅을 서버 저널에서 확인했습니다. MetaMask로 다시
-                민팅하지 말고
-                {{
-                  pendingSync.serverRpcProof
-                    ? '확인된 민팅 결과를 DB에 동기화해 주세요.'
-                    : '서버 RPC 재검증과 DB 동기화를 재개해 주세요.'
-                }}
-              </template>
-              <template v-else>
-                온체인 트랜잭션은 성공했습니다. 새 트랜잭션을 보내기 전에 서버 동기화를 완료해
-                주세요.
-              </template>
-            </p>
-            <p v-else-if="pendingSync">
-              채권 #{{ pendingSync.receivableId }}의 서버 동기화가 남아 있어 새 블록체인 요청이 잠겨
-              있습니다.
-            </p>
-            <p v-else-if="canCreateOnchain">
-              DB 등록이 끝났습니다. Seller 지갑으로 GIWA 채권을 생성해 주세요.
-            </p>
-            <p
-              v-else-if="
-                isBuyer && selectedReceivable.status === 'CREATED' && !hasCompleteChainMetadata
-              "
-            >
-              Buyer 검토 대상입니다. Seller의 GIWA 온체인 생성을 기다리는 동안 위 채권 내용을 먼저
-              확인할 수 있습니다.
-            </p>
-            <p v-else-if="canVerify">
-              GIWA 채권이 생성되었습니다. Buyer 지갑으로 채무 내용을 검증해 주세요.
-            </p>
-            <p
-              v-else-if="
-                isSeller &&
-                selectedReceivable.status === 'CREATED' &&
-                selectedReceivable.onchainReceivableId
-              "
-            >
-              온체인 생성 완료 · Buyer 검증을 기다리고 있습니다.
-            </p>
-            <p v-else-if="shouldShowTokenizationJournalGate" aria-live="polite">
-              {{ tokenizationJournalMessage || '서버의 기존 NFT 민팅 이력을 확인해야 합니다.' }}
-            </p>
-            <p v-else-if="canTokenize">
-              Buyer 검증이 완료되었습니다. Seller 지갑으로 채권 NFT를 민팅해 주세요.
-            </p>
-            <p v-else-if="isBuyer && selectedReceivable.status === 'VERIFIED'">
-              채권 검증이 완료되었습니다. Seller의 NFT 민팅을 기다리고 있습니다.
-            </p>
-            <p v-else-if="isSeller && selectedReceivable.status === 'VERIFIED'">
-              Buyer 검증은 완료되었지만 토큰화에 필요한 온체인 메타데이터가 부족합니다. 페이지를
-              새로고침해 주세요.
-            </p>
-            <p v-else-if="selectedReceivable.status === 'TOKENIZED'">
-              채권 NFT 민팅이 완료되었습니다. Funder 자금 공급을 기다리고 있습니다.
-            </p>
-            <p v-else-if="isBuyer && selectedReceivable.status === 'FUNDED'">
-              Funder 자금 공급이 완료되었습니다. Buyer 지갑으로 채권 금액을 상환해 주세요.
-            </p>
-            <p v-else-if="selectedReceivable.status === 'FUNDED'">
-              Funder 자금 공급이 완료되었습니다. Buyer 상환을 기다리고 있습니다.
-            </p>
-            <p v-else-if="selectedReceivable.status === 'REPAID'">
-              Buyer 상환이 완료되었습니다. 채권 상태가 REPAID로 기록되었습니다.
-            </p>
-            <p v-else>현재 계정에서 실행할 생성·검증 작업이 없습니다.</p>
-
-            <button
+            <div
               v-if="pendingSync && !pendingSyncForSelected"
-              type="button"
-              @click="selectPendingReceivable"
+              class="cross-sync-alert"
+              role="alert"
             >
-              미동기화 채권으로 이동
-            </button>
-            <button
-              v-if="canCreateOnchain"
-              type="button"
-              :disabled="isChainActionRunning"
-              @click="createOnchain"
-            >
-              {{ isChainActionRunning ? 'GIWA 확인 중...' : 'Seller 지갑으로 GIWA 채권 생성' }}
-            </button>
-            <button
-              v-if="shouldShowTokenizationJournalGate"
-              class="secondary"
-              type="button"
-              :disabled="isTokenizationJournalChecking || isRefreshing || isChainActionRunning"
-              @click="refreshTokenizationJournal"
-            >
-              {{
-                isTokenizationJournalChecking
-                  ? '서버 민팅 이력 확인 중...'
-                  : '서버 민팅 상태 다시 확인'
-              }}
-            </button>
-            <button
-              v-if="canTokenize"
-              type="button"
-              :disabled="isChainActionRunning"
-              @click="tokenizeOnchain"
-            >
-              {{ isChainActionRunning ? 'NFT 민팅 확인 중...' : 'Seller 지갑으로 채권 NFT 민팅' }}
-            </button>
-            <button
-              v-if="isBuyer && selectedReceivable.status === 'FUNDED'"
-              type="button"
-              @click="router.push({ name: 'repayment' })"
-            >
-              Buyer 채권 상환 화면으로 이동
-            </button>
-          </div>
+              <TriangleAlert :size="18" aria-hidden="true" />
+              <div>
+                <strong>다른 채권의 동기화가 필요합니다</strong>
+                <p>
+                  채권 #{{ pendingSync.receivableId }}의 서버 동기화가 남아 있어 새 블록체인 요청이
+                  잠겨 있습니다.
+                </p>
+                <button type="button" @click="selectPendingReceivable">
+                  <RotateCcw :size="16" aria-hidden="true" />
+                  미동기화 채권으로 이동
+                </button>
+              </div>
+            </div>
 
-          <div v-if="pendingSyncForSelected" class="sync-alert" role="alert">
-            <strong v-if="pendingSync.phase === 'submitted'">
-              {{
-                pendingSync.type === 'tokenized'
-                  ? '기존 민팅 제출 확인 · 새 민팅 금지'
-                  : 'GIWA 제출 완료 · 블록 확인 필요'
-              }}
-            </strong>
-            <strong v-else-if="pendingSync.recoveredFromServerJournal">
-              기존 민팅 성공 확인 · MetaMask 재호출 금지
-            </strong>
-            <strong v-else>온체인 성공 · 서버 동기화 필요</strong>
-            <p>{{ pendingSync.payload.txHash }}</p>
-            <p v-if="pendingSync.additionalServerPendingCount">
-              서버에 별도 진행 중인 민팅
-              {{ pendingSync.additionalServerPendingCount }}건도 있습니다. 현재 브라우저에 저장된
-              트랜잭션을 먼저 확인합니다.
+            <ol class="workflow-timeline" aria-label="블록체인 채권 진행 단계">
+              <li
+                v-for="step in workflowSteps"
+                :key="step.key"
+                class="workflow-step"
+                :class="`is-${workflowStepState(step.key)}`"
+                :aria-current="workflowStepState(step.key) === 'current' ? 'step' : undefined"
+              >
+                <div class="step-rail" aria-hidden="true">
+                  <span class="step-marker">
+                    <Check
+                      v-if="workflowStepState(step.key) === 'complete'"
+                      :size="16"
+                      stroke-width="2.5"
+                    />
+                    <component :is="step.icon" v-else :size="16" />
+                  </span>
+                </div>
+
+                <div class="step-content">
+                  <div class="step-heading">
+                    <div>
+                      <span class="step-code">{{ step.key }}</span>
+                      <h4>{{ step.title }}</h4>
+                    </div>
+                    <span class="step-state">
+                      {{
+                        workflowStepState(step.key) === 'complete'
+                          ? '완료'
+                          : workflowStepState(step.key) === 'current'
+                            ? '현재 단계'
+                            : '대기'
+                      }}
+                    </span>
+                  </div>
+                  <p class="step-description">{{ step.description }}</p>
+
+                  <dl
+                    v-if="
+                      step.key === 'CREATED' &&
+                      (selectedReceivable.onchainReceivableId ||
+                        selectedReceivable.contractAddress ||
+                        selectedReceivable.createTxHash)
+                    "
+                    class="step-metadata"
+                  >
+                    <template v-if="selectedReceivable.onchainReceivableId">
+                      <dt>온체인 ID</dt>
+                      <dd>{{ selectedReceivable.onchainReceivableId }}</dd>
+                    </template>
+                    <template v-if="selectedReceivable.contractAddress">
+                      <dt>컨트랙트</dt>
+                      <dd class="chain-reference">
+                        <span>{{ selectedReceivable.contractAddress }}</span>
+                        <a
+                          v-if="addressExplorerUrl(selectedReceivable.contractAddress)"
+                          class="explorer-button"
+                          :href="addressExplorerUrl(selectedReceivable.contractAddress)"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="컨트랙트 주소를 익스플로러에서 보기"
+                        >
+                          <ExternalLink :size="13" aria-hidden="true" />
+                          익스플로러
+                        </a>
+                      </dd>
+                    </template>
+                    <template v-if="selectedReceivable.createTxHash">
+                      <dt>생성 Tx</dt>
+                      <dd class="chain-reference">
+                        <span>{{ selectedReceivable.createTxHash }}</span>
+                        <a
+                          v-if="transactionExplorerUrl(selectedReceivable.createTxHash)"
+                          class="explorer-button"
+                          :href="transactionExplorerUrl(selectedReceivable.createTxHash)"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="채권 생성 트랜잭션을 익스플로러에서 보기"
+                        >
+                          <ExternalLink :size="13" aria-hidden="true" />
+                          익스플로러
+                        </a>
+                      </dd>
+                    </template>
+                  </dl>
+
+                  <dl
+                    v-if="step.key === 'VERIFIED' && selectedReceivable.verifyTxHash"
+                    class="step-metadata"
+                  >
+                    <dt>검증 Tx</dt>
+                    <dd class="chain-reference">
+                      <span>{{ selectedReceivable.verifyTxHash }}</span>
+                      <a
+                        v-if="transactionExplorerUrl(selectedReceivable.verifyTxHash)"
+                        class="explorer-button"
+                        :href="transactionExplorerUrl(selectedReceivable.verifyTxHash)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Buyer 검증 트랜잭션을 익스플로러에서 보기"
+                      >
+                        <ExternalLink :size="13" aria-hidden="true" />
+                        익스플로러
+                      </a>
+                    </dd>
+                  </dl>
+
+                  <dl
+                    v-if="
+                      step.key === 'TOKENIZED' &&
+                      (selectedReceivable.tokenId || selectedReceivable.tokenizeTxHash)
+                    "
+                    class="step-metadata"
+                  >
+                    <template v-if="selectedReceivable.tokenId">
+                      <dt>NFT 토큰 ID</dt>
+                      <dd>{{ selectedReceivable.tokenId }}</dd>
+                    </template>
+                    <template v-if="selectedReceivable.tokenizeTxHash">
+                      <dt>토큰화 Tx</dt>
+                      <dd class="chain-reference">
+                        <span>{{ selectedReceivable.tokenizeTxHash }}</span>
+                        <a
+                          v-if="transactionExplorerUrl(selectedReceivable.tokenizeTxHash)"
+                          class="explorer-button"
+                          :href="transactionExplorerUrl(selectedReceivable.tokenizeTxHash)"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="NFT 토큰화 트랜잭션을 익스플로러에서 보기"
+                        >
+                          <ExternalLink :size="13" aria-hidden="true" />
+                          익스플로러
+                        </a>
+                      </dd>
+                    </template>
+                  </dl>
+
+                  <dl
+                    v-if="step.key === 'FUNDED' && selectedReceivable.fundingTxHash"
+                    class="step-metadata"
+                  >
+                    <dt>펀딩 Tx</dt>
+                    <dd class="chain-reference">
+                      <span>{{ selectedReceivable.fundingTxHash }}</span>
+                      <a
+                        v-if="transactionExplorerUrl(selectedReceivable.fundingTxHash)"
+                        class="explorer-button"
+                        :href="transactionExplorerUrl(selectedReceivable.fundingTxHash)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="자금 공급 트랜잭션을 익스플로러에서 보기"
+                      >
+                        <ExternalLink :size="13" aria-hidden="true" />
+                        익스플로러
+                      </a>
+                    </dd>
+                  </dl>
+
+                  <dl
+                    v-if="step.key === 'REPAID' && selectedReceivable.repayTxHash"
+                    class="step-metadata"
+                  >
+                    <dt>상환 Tx</dt>
+                    <dd class="chain-reference">
+                      <span>{{ selectedReceivable.repayTxHash }}</span>
+                      <a
+                        v-if="transactionExplorerUrl(selectedReceivable.repayTxHash)"
+                        class="explorer-button"
+                        :href="transactionExplorerUrl(selectedReceivable.repayTxHash)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Buyer 상환 트랜잭션을 익스플로러에서 보기"
+                      >
+                        <ExternalLink :size="13" aria-hidden="true" />
+                        익스플로러
+                      </a>
+                    </dd>
+                  </dl>
+
+                  <template v-if="step.key === 'CREATED'">
+                    <div v-if="canCreateOnchain" class="step-action">
+                      <p>DB 등록이 끝났습니다. Seller 지갑으로 GIWA 채권을 생성해 주세요.</p>
+                      <button type="button" :disabled="isChainActionRunning" @click="createOnchain">
+                        <LoaderCircle
+                          v-if="isChainActionRunning"
+                          class="spinning"
+                          :size="16"
+                          aria-hidden="true"
+                        />
+                        <FilePlus v-else :size="16" aria-hidden="true" />
+                        {{
+                          isChainActionRunning
+                            ? 'GIWA 확인 중...'
+                            : 'Seller 지갑으로 GIWA 채권 생성'
+                        }}
+                      </button>
+                    </div>
+                    <p
+                      v-else-if="
+                        !pendingSync &&
+                        isBuyer &&
+                        selectedReceivable.status === 'CREATED' &&
+                        !hasCompleteChainMetadata
+                      "
+                      class="step-note"
+                    >
+                      Buyer 검토 대상입니다. Seller의 GIWA 온체인 생성을 기다리는 동안 채권 내용을
+                      먼저 확인할 수 있습니다.
+                    </p>
+                  </template>
+
+                  <template v-if="step.key === 'VERIFIED'">
+                    <p v-if="canVerify" class="step-note">
+                      GIWA 채권이 생성되었습니다. Buyer 지갑으로 채무 내용을 검증해 주세요.
+                    </p>
+                    <p
+                      v-else-if="
+                        !pendingSync &&
+                        isSeller &&
+                        selectedReceivable.status === 'CREATED' &&
+                        selectedReceivable.onchainReceivableId
+                      "
+                      class="step-note"
+                    >
+                      온체인 생성 완료 · Buyer 검증을 기다리고 있습니다.
+                    </p>
+
+                    <section
+                      v-if="buyerReviewRequired"
+                      class="buyer-review"
+                      aria-labelledby="buyer-review-title"
+                    >
+                      <div>
+                        <p class="review-eyebrow">Buyer 검토</p>
+                        <h5 id="buyer-review-title">채권 내용 확인 및 검증</h5>
+                      </div>
+                      <p>
+                        온체인은 실제 거래 사실을 자동으로 판단하지 않습니다. 위의 거래 조건을
+                        확인한 Buyer 회사의 지갑 서명이 채무 확인 증거로 기록됩니다.
+                      </p>
+                      <ul class="review-checklist">
+                        <li>Seller와 Buyer 회사 및 등록 지갑이 올바른지 확인</li>
+                        <li>채권 금액, 펀딩 요청 금액, 발행일과 만기일 확인</li>
+                        <li>설명과 문서 해시가 실제 거래 증빙과 일치하는지 확인</li>
+                      </ul>
+                      <p v-if="!hasCompleteChainMetadata" class="review-prerequisite" role="status">
+                        지금 채권 내용을 검토할 수 있습니다. MetaMask 서명은 Seller가 미검증 채권을
+                        GIWA에 생성한 뒤 활성화됩니다.
+                      </p>
+                      <p v-else class="review-ready" role="status">
+                        Seller의 GIWA 생성이 완료되었습니다. 서명 직전에 화면 정보와 온체인 CREATED
+                        데이터를 다시 대조합니다.
+                      </p>
+                      <label class="attestation">
+                        <input
+                          v-model="buyerAttestationAccepted"
+                          type="checkbox"
+                          :disabled="isChainActionRunning || Boolean(pendingSync)"
+                        />
+                        <span>
+                          위 거래 조건과 증빙을 확인했으며, Buyer 회사로서 해당 채무 내용을
+                          확인합니다.
+                        </span>
+                      </label>
+                      <div class="review-actions">
+                        <button
+                          class="secondary"
+                          type="button"
+                          :disabled="isRefreshing || isChainActionRunning"
+                          @click="refreshSelectedReceivable"
+                        >
+                          <RefreshCw
+                            :class="{ spinning: isRefreshing }"
+                            :size="16"
+                            aria-hidden="true"
+                          />
+                          {{ isRefreshing ? '불러오는 중...' : '상태 새로고침' }}
+                        </button>
+                        <button
+                          type="button"
+                          :disabled="!canSubmitVerification"
+                          @click="verifyOnchain"
+                        >
+                          <ShieldCheck :size="16" aria-hidden="true" />
+                          {{ buyerVerificationButtonText }}
+                        </button>
+                      </div>
+                    </section>
+                  </template>
+
+                  <template v-if="step.key === 'TOKENIZED'">
+                    <div v-if="shouldShowTokenizationJournalGate" class="step-action">
+                      <p aria-live="polite">
+                        {{
+                          tokenizationJournalMessage ||
+                          '서버의 기존 NFT 민팅 이력을 확인해야 합니다.'
+                        }}
+                      </p>
+                      <button
+                        class="secondary"
+                        type="button"
+                        :disabled="
+                          isTokenizationJournalChecking || isRefreshing || isChainActionRunning
+                        "
+                        @click="refreshTokenizationJournal"
+                      >
+                        <RefreshCw
+                          :class="{ spinning: isTokenizationJournalChecking }"
+                          :size="16"
+                          aria-hidden="true"
+                        />
+                        {{
+                          isTokenizationJournalChecking
+                            ? '서버 민팅 이력 확인 중...'
+                            : '서버 민팅 상태 다시 확인'
+                        }}
+                      </button>
+                    </div>
+                    <div v-else-if="canTokenize" class="step-action">
+                      <p>Buyer 검증이 완료되었습니다. Seller 지갑으로 채권 NFT를 민팅해 주세요.</p>
+                      <button
+                        type="button"
+                        :disabled="isChainActionRunning"
+                        @click="tokenizeOnchain"
+                      >
+                        <LoaderCircle
+                          v-if="isChainActionRunning"
+                          class="spinning"
+                          :size="16"
+                          aria-hidden="true"
+                        />
+                        <Box v-else :size="16" aria-hidden="true" />
+                        {{
+                          isChainActionRunning
+                            ? 'NFT 민팅 확인 중...'
+                            : 'Seller 지갑으로 채권 NFT 민팅'
+                        }}
+                      </button>
+                    </div>
+                    <p
+                      v-else-if="
+                        !pendingSync && isBuyer && selectedReceivable.status === 'VERIFIED'
+                      "
+                      class="step-note"
+                    >
+                      채권 검증이 완료되었습니다. Seller의 NFT 민팅을 기다리고 있습니다.
+                    </p>
+                    <p
+                      v-else-if="
+                        !pendingSync && isSeller && selectedReceivable.status === 'VERIFIED'
+                      "
+                      class="step-note"
+                    >
+                      Buyer 검증은 완료되었지만 토큰화에 필요한 온체인 메타데이터가 부족합니다.
+                      페이지를 새로고침해 주세요.
+                    </p>
+                  </template>
+
+                  <p
+                    v-if="
+                      step.key === 'FUNDED' &&
+                      !pendingSync &&
+                      selectedReceivable.status === 'TOKENIZED'
+                    "
+                    class="step-note"
+                  >
+                    채권 NFT 민팅이 완료되었습니다. Funder 자금 공급을 기다리고 있습니다.
+                  </p>
+
+                  <template v-if="step.key === 'REPAID'">
+                    <div
+                      v-if="!pendingSync && isBuyer && selectedReceivable.status === 'FUNDED'"
+                      class="step-action"
+                    >
+                      <p>
+                        Funder 자금 공급이 완료되었습니다. Buyer 지갑으로 채권 금액을 상환해 주세요.
+                      </p>
+                      <button type="button" @click="router.push({ name: 'repayment' })">
+                        <HandCoins :size="16" aria-hidden="true" />
+                        Buyer 채권 상환 화면으로 이동
+                      </button>
+                    </div>
+                    <p
+                      v-else-if="!pendingSync && selectedReceivable.status === 'FUNDED'"
+                      class="step-note"
+                    >
+                      Funder 자금 공급이 완료되었습니다. Buyer 상환을 기다리고 있습니다.
+                    </p>
+                    <p
+                      v-else-if="selectedReceivable.status === 'REPAID'"
+                      class="step-note complete-note"
+                    >
+                      Buyer 상환이 완료되었습니다. 채권 상태가 REPAID로 기록되었습니다.
+                    </p>
+                  </template>
+
+                  <div
+                    v-if="step.pendingType && pendingSyncMatches(step.pendingType)"
+                    class="sync-alert"
+                    role="alert"
+                  >
+                    <div class="sync-heading">
+                      <TriangleAlert :size="18" aria-hidden="true" />
+                      <strong v-if="pendingSync.phase === 'submitted'">
+                        {{
+                          pendingSync.type === 'tokenized'
+                            ? '기존 민팅 제출 확인 · 새 민팅 금지'
+                            : 'GIWA 제출 완료 · 블록 확인 필요'
+                        }}
+                      </strong>
+                      <strong v-else-if="pendingSync.recoveredFromServerJournal">
+                        기존 민팅 성공 확인 · MetaMask 재호출 금지
+                      </strong>
+                      <strong v-else>온체인 성공 · 서버 동기화 필요</strong>
+                    </div>
+
+                    <p v-if="pendingSync.phase === 'submitted'">
+                      <template v-if="pendingSync.recoveredFromServerJournal">
+                        서버 저널에서
+                        {{
+                          pendingSync.pendingTransactionCount > 1
+                            ? `진행 중인 민팅 ${pendingSync.pendingTransactionCount}건`
+                            : '진행 중인 민팅'
+                        }}을 확인했습니다. 새 민팅을 보내지 말고 아래 트랜잭션의 블록 확인을
+                        이어받아 주세요. 서버 조회만으로는 nonce·교체 정보를 모두 복원할 수 없어
+                        기존 해시를 기준으로 안전하게 확인합니다.
+                      </template>
+                      <template v-else>
+                        트랜잭션이 GIWA에 제출되었습니다. 새 트랜잭션을 보내지 말고 기존 블록 확인을
+                        이어받아 주세요.
+                      </template>
+                    </p>
+                    <p v-else>
+                      <template v-if="pendingSync.recoveredFromServerJournal">
+                        이미 CONFIRMED 처리된 NFT 민팅을 서버 저널에서 확인했습니다. MetaMask로 다시
+                        민팅하지 말고
+                        {{
+                          pendingSync.serverRpcProof
+                            ? '확인된 민팅 결과를 DB에 동기화해 주세요.'
+                            : '서버 RPC 재검증과 DB 동기화를 재개해 주세요.'
+                        }}
+                      </template>
+                      <template v-else>
+                        온체인 트랜잭션은 성공했습니다. 새 트랜잭션을 보내기 전에 서버 동기화를
+                        완료해 주세요.
+                      </template>
+                    </p>
+                    <code>{{ pendingSync.payload.txHash }}</code>
+                    <p v-if="pendingSync.additionalServerPendingCount">
+                      서버에 별도 진행 중인 민팅
+                      {{ pendingSync.additionalServerPendingCount }}건도 있습니다. 현재 브라우저에
+                      저장된 트랜잭션을 먼저 확인합니다.
+                    </p>
+                    <button
+                      type="button"
+                      :disabled="isChainActionRunning"
+                      @click="retryPendingSync"
+                    >
+                      <RotateCcw :size="16" aria-hidden="true" />
+                      {{
+                        pendingSync.phase === 'submitted'
+                          ? '기존 트랜잭션 확인 이어받기'
+                          : pendingSync.type !== 'tokenized'
+                            ? '서버 동기화 재시도'
+                            : pendingSync.recoveredFromServerJournal && !pendingSync.serverRpcProof
+                              ? '서버 검증 및 DB 동기화 재개'
+                              : '민팅 결과 DB 동기화'
+                      }}
+                    </button>
+                  </div>
+                </div>
+              </li>
+            </ol>
+
+            <p
+              v-if="
+                !pendingSync &&
+                !canCreateOnchain &&
+                !(
+                  isBuyer &&
+                  selectedReceivable.status === 'CREATED' &&
+                  !hasCompleteChainMetadata
+                ) &&
+                !canVerify &&
+                !(
+                  isSeller &&
+                  selectedReceivable.status === 'CREATED' &&
+                  selectedReceivable.onchainReceivableId
+                ) &&
+                !shouldShowTokenizationJournalGate &&
+                !canTokenize &&
+                !(isBuyer && selectedReceivable.status === 'VERIFIED') &&
+                !(isSeller && selectedReceivable.status === 'VERIFIED') &&
+                !['TOKENIZED', 'FUNDED', 'REPAID'].includes(selectedReceivable.status)
+              "
+              class="workflow-empty"
+            >
+              현재 계정에서 실행할 생성·검증 작업이 없습니다.
             </p>
-            <button type="button" :disabled="isChainActionRunning" @click="retryPendingSync">
-              {{
-                pendingSync.phase === 'submitted'
-                  ? '기존 트랜잭션 확인 이어받기'
-                  : pendingSync.type !== 'tokenized'
-                    ? '서버 동기화 재시도'
-                    : pendingSync.recoveredFromServerJournal && !pendingSync.serverRpcProof
-                      ? '서버 검증 및 DB 동기화 재개'
-                      : '민팅 결과 DB 동기화'
-              }}
-            </button>
-          </div>
+          </section>
         </template>
         <p v-else-if="hasLoadedReceivables" class="empty">목록에서 채권을 선택하세요.</p>
       </section>
@@ -1472,60 +1798,179 @@ function updateBuyerBusinessNumber(event) {
 </template>
 
 <style scoped>
+/* Minimal B2B workspace treatment */
 .receivables-page {
+  --primary: #0b7654;
+  --primary-dark: #075f44;
+  --primary-soft: #edf8f3;
+  --text: #172a23;
+  --text-muted: #65756e;
+  --border: #dfe7e3;
+  --surface: #ffffff;
   min-height: 100%;
   padding: 32px;
-  background: #f4f8f5;
-  color: #15352b;
+  background: #f8faf9;
+  color: var(--text);
 }
 
-header {
+.page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  max-width: 1180px;
-  margin: 0 auto 24px;
+  gap: 24px;
+  max-width: 1200px;
+  margin: 0 auto 32px;
+}
+
+.eyebrow,
+.section-eyebrow,
+.review-eyebrow,
+.step-code {
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.eyebrow,
+.section-eyebrow,
+.review-eyebrow {
+  letter-spacing: 0;
+}
+
+.step-code {
+  letter-spacing: 0.06em;
 }
 
 .eyebrow {
-  margin: 0 0 3px;
-  color: #0b7654;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
+  margin: 0 0 4px;
 }
 
 h1 {
   margin: 0;
-  color: #15352b;
+  color: var(--text);
   font-size: 32px;
-  font-weight: 750;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  font-weight: 700;
 }
 
 h2 {
-  margin-bottom: 18px;
-  color: #15352b;
-  font-size: 20px;
-  font-weight: 750;
-  line-height: 1.35;
+  margin: 0 0 24px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .header-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
-.panel {
-  max-width: 1180px;
-  margin: 0 auto 20px;
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 650;
+  box-shadow: none;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--primary-dark);
+  box-shadow: none;
+}
+
+button:focus-visible,
+.explorer-button:focus-visible {
+  outline: 3px solid rgba(11, 118, 84, 0.22);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.secondary {
+  border: 1px solid #c8d5cf;
+  border-color: #c8d5cf;
+  background: var(--surface);
+  color: #344b42;
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: #9db5aa;
+  background: #f5f8f7;
+}
+
+.message {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 1200px;
+  margin: 0 auto 16px;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.message svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.message.transaction span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.message.transaction a {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.message a {
+  color: inherit;
+  font-weight: 650;
+}
+
+.error {
+  border-color: #efc3c3;
+  background: #fff5f5;
+  color: #9a2d2d;
+}
+
+.success,
+.pending {
+  border-color: #bcd8cc;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.transaction {
+  border-color: var(--border);
+  background: var(--surface);
+  color: #40564d;
+}
+
+.registration-section {
+  max-width: 1200px;
+  margin: 0 auto 24px;
   padding: 24px;
-  border: 1px solid #dce5e0;
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow: 0 6px 18px rgba(21, 53, 43, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
 }
 
 form,
@@ -1539,7 +1984,7 @@ form {
 }
 
 form > button {
-  min-width: 150px;
+  min-width: 144px;
   justify-self: start;
 }
 
@@ -1550,235 +1995,167 @@ form > button {
 }
 
 label {
-  color: #27463b;
-  font-size: 14px;
-  font-weight: 650;
+  color: #354d43;
+  font-weight: 600;
 }
 
 input,
 textarea {
   width: 100%;
-  min-height: 44px;
-  padding: 11px 12px;
-  border: 1px solid #b8c7c0;
-  border-radius: 9px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid #bdcbc5;
+  border-color: #bdcbc5;
+  border-radius: 8px;
   outline: none;
-  background: #fbfdfc;
-  color: #15352b;
+  background: var(--surface);
+  color: var(--text);
   resize: vertical;
   transition:
     border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    background-color 0.16s ease;
+    box-shadow 0.16s ease;
 }
 
 input:hover,
 textarea:hover {
-  border-color: #8fa69b;
-  background: #ffffff;
+  border-color: #91a99e;
 }
 
 input:focus,
 textarea:focus {
-  border-color: #0b7654;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(11, 118, 84, 0.12);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(11, 118, 84, 0.1);
 }
 
-button {
-  min-height: 42px;
-  border: 0;
-  border-radius: 9px;
-  padding: 11px 16px;
-  background: #0b7654;
-  color: white;
-  cursor: pointer;
-  font-weight: 700;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    box-shadow 0.16s ease,
-    color 0.16s ease;
-}
-
-button:hover:not(:disabled) {
-  background: #075f44;
-}
-
-button:focus-visible {
-  outline: 3px solid rgba(11, 118, 84, 0.28);
-  outline-offset: 2px;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.secondary {
-  border: 1px solid #9eb2a8;
-  background: #ffffff;
-  color: #315548;
-}
-
-.secondary:hover:not(:disabled) {
-  border-color: #759889;
-  background: #f1f7f4;
-}
-
-.message {
-  max-width: 1180px;
-  margin: 0 auto 16px;
-  padding: 12px 16px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  overflow-wrap: anywhere;
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.message a {
-  margin-left: 8px;
-  color: inherit;
-  font-weight: 700;
-}
-
-.error {
-  border-color: #efc0c0;
-  background: #fff0f0;
-  color: #a32323;
-}
-
-.success {
-  border-color: #afd8c7;
-  background: #e8f7ef;
-  color: #086245;
-}
-
-.pending,
-.transaction {
-  border-color: #bfd6eb;
-  background: #eef5ff;
-  color: #22558c;
-}
-
-.content-grid {
+.receivables-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
-  align-items: start;
-  gap: 20px;
-  max-width: 1180px;
+  grid-template-columns: minmax(288px, 360px) minmax(0, 1fr);
+  align-items: stretch;
+  max-width: 1200px;
   margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
 }
 
-.content-grid .panel {
-  width: 100%;
-  margin: 0;
+.list-pane,
+.detail-pane {
+  min-width: 0;
+  padding: 24px;
+}
+
+.list-pane {
+  border-right: 1px solid var(--border);
+  background: #fbfcfb;
 }
 
 .receivable-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
   width: 100%;
-  margin-top: 10px;
-  padding: 14px 16px;
-  border: 1px solid #e1e9e5;
-  border-radius: 11px;
-  text-align: left;
-  background: #f4f8f5;
-  color: #15352b;
+  min-height: 0;
+  margin: 0;
+  padding: 16px 8px 16px 14px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.receivable-row:first-of-type {
+  border-top-color: transparent;
 }
 
 .receivable-row:hover:not(:disabled) {
-  border-color: #b8cfc3;
-  background: #edf6f1;
+  border-color: var(--border);
+  border-left-color: #8fb9a8;
+  background: #f3f7f5;
 }
 
-.receivable-row.selected {
-  border-color: #0b7654;
-  outline: none;
-  background: #eaf6ef;
-  box-shadow: 0 0 0 1px rgba(11, 118, 84, 0.16);
-}
-
+.receivable-row.selected,
 .receivable-row.selected:hover:not(:disabled) {
-  background: #e5f3eb;
+  border-left-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: none;
 }
 
-.receivable-row span:first-child {
+.receivable-row > span:first-child {
   display: grid;
-  gap: 2px;
+  gap: 4px;
+  grid-row: 1 / 3;
 }
 
 .receivable-row strong {
-  font-weight: 750;
-}
-
-.receivable-row small {
-  color: #62736b;
-  line-height: 1.45;
-}
-
-.receivable-row .action-hint {
-  margin-top: 4px;
-  color: #0b7654;
   font-weight: 700;
 }
 
-.amount {
-  white-space: nowrap;
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
+.receivable-row small {
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
-.status {
-  padding: 4px 8px;
+.receivable-row .amount {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.receivable-row .status {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+  padding: 2px 8px;
+  border: 1px solid #c5ded3;
   border-radius: 999px;
-  background: #dff2e8;
-  color: #0b7654;
-  font-size: 12px;
-  font-weight: 750;
-  letter-spacing: 0.02em;
+  background: transparent;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.receivable-row .action-hint {
+  color: var(--primary);
+  font-weight: 650;
 }
 
 .empty {
-  margin: 0;
-  padding: 14px 16px;
-  border: 1px solid #e1e9e5;
-  border-radius: 10px;
-  background: #f8fbf9;
-  color: #788a82;
-  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border: 1px dashed #cfdad5;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
 }
 
-.loading-state {
-  color: #315548;
-}
-
-dl {
+.receivable-details {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  column-gap: 18px;
-  row-gap: 0;
+  grid-template-columns: 112px minmax(0, 1fr);
+  column-gap: 16px;
   margin: 0;
 }
 
-dt {
+.receivable-details dt,
+.receivable-details dd {
   padding: 8px 0;
   border-bottom: 1px solid #edf1ef;
-  color: #788a82;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.5;
+  border-bottom-color: #edf1ef;
 }
 
-dd {
+.receivable-details dt {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.receivable-details dd {
   margin: 0;
-  padding: 8px 0;
-  border-bottom: 1px solid #edf1ef;
-  color: #15352b;
+  color: var(--text);
   overflow-wrap: anywhere;
   line-height: 1.5;
 }
@@ -1788,10 +2165,185 @@ dd {
   font-size: 12px;
 }
 
+.workflow-section {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.section-heading,
+.step-heading,
+.sync-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.section-eyebrow,
+.review-eyebrow,
+.step-code {
+  margin: 0 0 4px;
+}
+
+.section-heading h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.current-status,
+.step-state {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid #cbd8d2;
+  border-radius: 999px;
+  color: #566a61;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.workflow-timeline {
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-step {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 16px;
+  position: relative;
+  padding: 0 0 32px;
+}
+
+.workflow-step:last-child {
+  padding-bottom: 0;
+}
+
+.step-rail {
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+
+.step-rail::after {
+  position: absolute;
+  top: 32px;
+  bottom: -32px;
+  left: 50%;
+  width: 1px;
+  background: var(--border);
+  content: '';
+  transform: translateX(-50%);
+}
+
+.workflow-step:last-child .step-rail::after {
+  display: none;
+}
+
+.step-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cbd6d1;
+  border-radius: 8px;
+  background: var(--surface);
+  color: #7b8a84;
+}
+
+.workflow-step.is-complete .step-marker {
+  border-color: #9cc7b5;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.workflow-step.is-current .step-marker {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.workflow-step.is-complete .step-state,
+.workflow-step.is-current .step-state {
+  border-color: #b9d6ca;
+  color: var(--primary);
+}
+
+.step-content {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.step-heading h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.step-description,
+.step-note,
+.step-action p,
+.buyer-review p,
+.cross-sync-alert p,
+.sync-alert p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.step-metadata {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 0 16px;
+  margin: 16px 0 0;
+  padding: 8px 16px;
+  border-left: 2px solid #9cc7b5;
+  background: #f8fbf9;
+}
+
+.step-metadata dt,
+.step-metadata dd {
+  margin: 0;
+  padding: 8px 0;
+  border: 0;
+  font-size: 12px;
+}
+
+.step-metadata dt {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.step-action,
+.buyer-review {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.step-action button,
+.cross-sync-alert button,
+.sync-alert button {
+  margin-top: 16px;
+}
+
+.step-note.complete-note {
+  color: var(--primary-dark);
+  font-weight: 600;
+}
+
 .chain-reference {
   display: flex;
   align-items: flex-start;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -1800,178 +2352,194 @@ dd {
   min-width: 0;
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .explorer-button {
   display: inline-flex;
-  flex: 0 0 auto;
   align-items: center;
-  min-height: 30px;
-  padding: 5px 9px;
-  border: 1px solid #0b7654;
-  border-radius: 7px;
-  background: white;
-  color: #0b7654;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-color: #a8c8ba;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--primary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 650;
   line-height: 1;
   text-decoration: none;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    color 0.16s ease;
 }
 
 .explorer-button:hover {
-  border-color: #075f44;
-  background: #eaf6ef;
-  color: #075f44;
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-dark);
 }
 
-.explorer-button:focus-visible {
-  outline: 3px solid rgba(11, 118, 84, 0.24);
-  outline-offset: 2px;
-}
-
-.review-card {
+.buyer-review {
   display: grid;
-  gap: 14px;
-  margin-top: 22px;
-  padding: 18px;
-  border: 1px solid #76ae96;
-  border-radius: 12px;
-  background: #f2faf6;
-  box-shadow: 0 6px 16px rgba(21, 53, 43, 0.04);
+  gap: 16px;
 }
-.review-eyebrow {
-  margin: 0 0 4px;
-  color: #0b7654;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-.review-card h3 {
+
+.buyer-review h5 {
   margin: 0;
-  color: #15352b;
-  font-size: 18px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
 }
-.review-card p {
+
+.buyer-review > p,
+.buyer-review .review-checklist {
   margin: 0;
-  color: #315548;
-  line-height: 1.55;
 }
+
 .review-checklist {
   display: grid;
-  gap: 7px;
-  margin: 0;
+  gap: 8px;
   padding-left: 20px;
-  color: #27463b;
+  color: #40564d;
   font-size: 14px;
 }
 
 .review-checklist li::marker {
-  color: #0b7654;
+  color: var(--primary);
 }
-.review-card .review-prerequisite,
-.review-card .review-ready {
-  padding: 11px 12px;
-  border-radius: 8px;
+
+.buyer-review .review-prerequisite,
+.buyer-review .review-ready {
+  padding: 16px;
+  border-left: 2px solid #d4a44e;
+  background: #fffaf0;
+  color: #75531d;
 }
-.review-card .review-prerequisite {
-  background: #fff5df;
-  color: #7b4b07;
+
+.buyer-review .review-ready {
+  border-left-color: #86b7a3;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
 }
-.review-card .review-ready {
-  background: #dff2e8;
-  color: #0b6548;
-}
+
 .attestation {
   display: flex;
-  gap: 10px;
   align-items: flex-start;
-  padding: 12px;
-  border: 1px solid #b8cfc3;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #cbd7d1;
+  border-color: #cbd7d1;
   border-radius: 8px;
-  background: white;
+  box-shadow: none;
   cursor: pointer;
   line-height: 1.5;
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    background-color 0.16s ease;
-}
-
-.attestation:hover {
-  border-color: #86ad9b;
-  background: #fbfefc;
-}
-
-.attestation:focus-within {
-  border-color: #0b7654;
-  box-shadow: 0 0 0 3px rgba(11, 118, 84, 0.12);
 }
 
 .attestation input {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
+  min-height: 0;
   margin-top: 2px;
   padding: 0;
-  accent-color: #0b7654;
+  accent-color: var(--primary);
 }
+
+.attestation:focus-within {
+  box-shadow: 0 0 0 3px rgba(11, 118, 84, 0.12);
+}
+
 .review-actions {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
+
 .review-actions button {
-  width: 100%;
+  width: auto;
 }
-.workflow-card,
+
+.cross-sync-alert,
 .sync-alert {
-  display: grid;
-  gap: 10px;
-  margin-top: 22px;
+  margin-top: 24px;
   padding: 16px;
-  border-radius: 10px;
-}
-.workflow-card {
-  border: 1px solid #c9ddd3;
-  background: #f4f9f6;
-}
-.workflow-card strong,
-.workflow-card p {
-  color: #27463b;
+  border: 0;
+  border-left: 3px solid #c78a2d;
+  border-radius: 0;
+  background: #fffaf0;
+  color: #684b1d;
 }
 
-.workflow-card > strong,
-.sync-alert > strong {
-  font-weight: 750;
+.cross-sync-alert {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
 }
 
-.workflow-card p,
-.sync-alert p {
-  margin: 0;
-  line-height: 1.55;
+.cross-sync-alert > svg {
+  margin-top: 2px;
 }
-.sync-alert {
-  border: 1px solid #e5b66f;
-  background: #fff8e9;
-}
+
+.cross-sync-alert strong,
 .sync-alert strong,
+.cross-sync-alert p,
 .sync-alert p {
-  color: #7b4b07;
-  overflow-wrap: anywhere;
+  color: inherit;
 }
-@media (max-width: 760px) {
-  .receivables-page {
-    padding: 20px;
+
+.sync-heading {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.sync-alert code {
+  display: block;
+  margin-top: 12px;
+  color: inherit;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.workflow-empty {
+  margin: 24px 0 0 48px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
+}
+
+@media (max-width: 880px) {
+  .receivables-workspace {
+    grid-template-columns: 1fr;
   }
 
-  header {
+  .list-pane {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 760px) {
+  .receivables-page {
+    padding: 24px;
+  }
+
+  .page-header {
     align-items: flex-start;
     flex-direction: column;
+    margin-bottom: 24px;
   }
 
   .header-actions {
@@ -1980,43 +2548,82 @@ dd {
   }
 
   .header-actions button {
-    flex: 1 1 140px;
+    flex: 1 1 144px;
   }
 
-  .panel {
-    padding: 20px;
+  .registration-section,
+  .list-pane,
+  .detail-pane {
+    padding: 24px;
   }
 
-  .two-columns,
-  .content-grid {
+  .review-actions {
+    display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .review-actions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .receivables-page {
+    padding: 24px 16px;
+  }
+
+  .registration-section,
+  .list-pane,
+  .detail-pane {
+    padding: 16px;
+  }
+
+  .two-columns {
+    grid-template-columns: 1fr;
+  }
+
+  form > button {
+    width: 100%;
   }
 
   .receivable-row {
     grid-template-columns: 1fr;
   }
 
-  dl {
+  .receivable-row > span:first-child,
+  .receivable-row .amount,
+  .receivable-row .status {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+
+  .receivable-details,
+  .step-metadata {
     grid-template-columns: 88px minmax(0, 1fr);
-    column-gap: 12px;
+    gap: 0 8px;
   }
 
-  .review-actions {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 520px) {
-  .receivables-page {
-    padding: 20px 16px 32px;
+  .section-heading,
+  .step-heading {
+    align-items: flex-start;
   }
 
-  .panel {
-    padding: 18px;
+  .workflow-step {
+    gap: 12px;
   }
 
-  form > button {
+  .workflow-empty {
+    margin-left: 44px;
+  }
+
+  .message.transaction {
+    flex-wrap: wrap;
+  }
+
+  .message.transaction a {
     width: 100%;
+    margin-left: 26px;
   }
 }
 </style>

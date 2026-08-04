@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { CircleAlert, Copy, LogOut, RefreshCw, UserRound, WalletCards } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useWalletStore } from '../stores/wallet'
 
@@ -74,7 +75,6 @@ async function logout() {
   <main class="profile-page">
     <section class="profile-shell">
       <header class="profile-heading">
-        <p class="eyebrow">GIWA RECEIVABLE FINANCE</p>
         <h1>내 정보</h1>
         <p>현재 로그인 계정과 이 회사에 연결된 지갑을 확인할 수 있습니다.</p>
       </header>
@@ -84,17 +84,28 @@ async function logout() {
       </p>
 
       <div v-else-if="profileError" class="notice error" role="alert">
-        <span>{{ profileError }}</span>
-        <button type="button" @click="loadProfile">다시 시도</button>
+        <div>
+          <CircleAlert aria-hidden="true" :size="20" />
+          <span>{{ profileError }}</span>
+        </div>
+        <button type="button" @click="loadProfile">
+          <RefreshCw aria-hidden="true" :size="16" />
+          다시 시도
+        </button>
       </div>
 
       <template v-else>
-        <div class="information-grid">
+        <div class="information-surface">
           <article class="information-card">
             <div class="card-heading">
-              <div>
-                <span class="card-label">계정</span>
-                <h2>로그인 정보</h2>
+              <div class="card-title">
+                <span class="section-icon" aria-hidden="true">
+                  <UserRound :size="20" />
+                </span>
+                <div>
+                  <span class="card-label">계정</span>
+                  <h2>로그인 정보</h2>
+                </div>
               </div>
               <span class="status connected">로그인됨</span>
             </div>
@@ -108,9 +119,14 @@ async function logout() {
 
           <article class="information-card">
             <div class="card-heading">
-              <div>
-                <span class="card-label">회사 지갑</span>
-                <h2>MetaMask 연결</h2>
+              <div class="card-title">
+                <span class="section-icon" aria-hidden="true">
+                  <WalletCards :size="20" />
+                </span>
+                <div>
+                  <span class="card-label">회사 지갑</span>
+                  <h2>MetaMask 연결</h2>
+                </div>
               </div>
               <span class="status" :class="{ connected: wallet.isConnected && !isWalletLoading }">
                 {{ isWalletLoading ? '확인 중' : wallet.isConnected ? '연결됨' : '미연결' }}
@@ -121,8 +137,14 @@ async function logout() {
               회사 지갑 정보를 불러오고 있습니다...
             </p>
             <div v-else-if="walletError" class="wallet-error" role="alert">
-              <p>{{ walletError }}</p>
-              <button class="text-button" type="button" @click="loadWallet">다시 조회</button>
+              <p>
+                <CircleAlert aria-hidden="true" :size="18" />
+                <span>{{ walletError }}</span>
+              </p>
+              <button class="text-button" type="button" @click="loadWallet">
+                <RefreshCw aria-hidden="true" :size="16" />
+                다시 조회
+              </button>
             </div>
             <template v-else-if="wallet.isConnected">
               <dl>
@@ -132,6 +154,7 @@ async function logout() {
                 </div>
               </dl>
               <button class="copy-button" type="button" @click="copyWalletAddress">
+                <Copy aria-hidden="true" :size="16" />
                 주소 복사
               </button>
               <p v-if="copyMessage" class="copy-message" role="status">{{ copyMessage }}</p>
@@ -143,8 +166,14 @@ async function logout() {
         </div>
 
         <div class="profile-actions">
-          <button type="button" @click="router.push({ name: 'dashboard' })">지갑 관리</button>
-          <button class="secondary" type="button" @click="logout">로그아웃</button>
+          <button type="button" @click="router.push({ name: 'dashboard' })">
+            <WalletCards aria-hidden="true" :size="18" />
+            지갑 관리
+          </button>
+          <button class="secondary" type="button" @click="logout">
+            <LogOut aria-hidden="true" :size="18" />
+            로그아웃
+          </button>
         </div>
       </template>
     </section>
@@ -156,100 +185,126 @@ async function logout() {
   display: grid;
   min-height: 100%;
   place-items: start center;
-  padding: 48px 24px 56px;
+  padding: var(--space-6) var(--space-3) var(--space-8);
 }
 
 .profile-shell {
-  width: min(100%, 900px);
+  width: min(100%, 800px);
 }
 
 .profile-heading {
-  margin-bottom: 26px;
-}
-
-.eyebrow {
-  margin: 0;
-  color: #0b7654;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  margin-bottom: var(--space-4);
 }
 
 h1 {
-  margin: 6px 0 4px;
-  color: #15352b;
-  font-size: clamp(30px, 5vw, 42px);
-  font-weight: 750;
-  line-height: 1.2;
-  letter-spacing: -0.025em;
+  margin: 0;
+  color: var(--color-text);
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
 }
 
 .profile-heading > p:last-child {
-  margin: 0;
-  color: #62736b;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
 }
 
-.information-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+.information-surface {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 
 .information-card {
   min-width: 0;
-  border: 1px solid #dce5e0;
-  border-radius: 16px;
-  padding: 24px;
-  background: #ffffff;
-  box-shadow: 0 14px 36px rgba(24, 62, 48, 0.055);
+  padding: var(--space-3);
+}
+
+.information-card + .information-card {
+  border-top: 1px solid var(--color-border);
 }
 
 .card-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-2);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d7e9e1;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
 }
 
 .card-label {
-  color: #6b7c74;
+  color: var(--color-text-muted);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 h2 {
   margin: 2px 0 0;
-  color: #15352b;
-  font-size: 20px;
-  font-weight: 750;
+  color: var(--color-text);
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .status {
+  display: inline-flex;
   flex: 0 0 auto;
-  border-radius: 999px;
-  padding: 5px 9px;
-  background: #eef1ef;
-  color: #68766f;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
+}
+
+.status::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #a8b1ad;
+  content: '';
 }
 
 .status.connected {
-  background: #e2f4eb;
-  color: #0b7654;
+  color: var(--color-brand);
+}
+
+.status.connected::before {
+  background: var(--color-brand);
 }
 
 dl {
-  margin: 24px 0 0;
+  margin: var(--space-3) 0 0;
 }
 
 dl > div {
   display: grid;
-  gap: 5px;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
 }
 
 dt {
-  color: #6b7c74;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
@@ -257,9 +312,9 @@ dd {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
-  color: #15352b;
-  font-size: 16px;
-  font-weight: 650;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .wallet-address {
@@ -268,23 +323,27 @@ dd {
 }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
   min-height: 42px;
   border: 0;
-  border-radius: 9px;
-  padding: 10px 16px;
-  background: #0b7654;
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-brand);
   color: white;
   cursor: pointer;
   font: inherit;
-  font-weight: 700;
+  font-weight: 600;
   transition:
-    background-color 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease;
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
-button:hover {
-  background: #075f44;
+button:hover:not(:disabled) {
+  background: var(--color-brand-hover);
 }
 
 button:focus-visible {
@@ -298,39 +357,47 @@ button:disabled {
 }
 
 .copy-button {
-  margin-top: 18px;
-  border: 1px solid #a8bab1;
-  background: #ffffff;
-  color: #315548;
+  margin-top: var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .copy-button:hover {
-  background: #f1f7f4;
+  background: var(--color-surface-subtle);
 }
 
 .copy-message,
 .empty-wallet,
 .wallet-error p {
-  margin: 12px 0 0;
-  color: #62736b;
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
 .wallet-error p {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
   color: #a32323;
+}
+
+.wallet-error p svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 
 .wallet-error .text-button {
   min-height: auto;
-  margin-top: 8px;
+  margin-top: var(--space-1);
   padding: 0;
   background: transparent;
-  color: #0b7654;
+  color: var(--color-brand);
 }
 
 .wallet-error .text-button:hover {
   background: transparent;
-  color: #075f44;
+  color: var(--color-brand-hover);
   text-decoration: underline;
 }
 
@@ -338,12 +405,22 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  border: 1px solid #dfe5e1;
-  border-radius: 13px;
-  padding: 18px;
-  background: #ffffff;
-  color: #52675e;
+  gap: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.notice > div {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.notice > div svg {
+  flex: 0 0 auto;
 }
 
 .notice button {
@@ -352,38 +429,39 @@ button:disabled {
 
 .notice.error {
   border-color: #efb4b4;
-  background: #fff4f4;
+  background: #fffafa;
   color: #8f1717;
 }
 
 .profile-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 22px;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
 }
 
 .profile-actions .secondary {
-  border: 1px solid #a8bab1;
-  background: #ffffff;
-  color: #315548;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .profile-actions .secondary:hover {
-  background: #f1f7f4;
+  background: var(--color-surface-subtle);
 }
 
 @media (max-width: 680px) {
   .profile-page {
-    padding: 36px 16px 44px;
-  }
-
-  .information-grid {
-    grid-template-columns: 1fr;
+    padding: var(--space-4) var(--space-2) var(--space-6);
   }
 
   .information-card {
-    padding: 20px;
+    padding: var(--space-2);
+  }
+
+  dl > div {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
   }
 
   .profile-actions {

@@ -1,4 +1,18 @@
 <script setup>
+import {
+  Check,
+  ChevronRight,
+  ExternalLink,
+  Files,
+  HandCoins,
+  LayoutDashboard,
+  LoaderCircle,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  TriangleAlert,
+  Wallet,
+} from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { transactionExplorerUrl } from '../contracts/addresses'
@@ -539,36 +553,53 @@ function shortAddress(value) {
   <main class="funding-page">
     <header class="page-header">
       <div>
-        <p class="eyebrow">GIWA FUNDING MARKET</p>
+        <p class="eyebrow">
+          <HandCoins :size="16" :stroke-width="1.8" aria-hidden="true" />
+          펀딩 마켓
+        </p>
         <h1>토큰화 채권 펀딩</h1>
         <p>Seller와 Buyer가 아닌 제3자 회사가 mKRW를 공급하고 에스크로된 채권 NFT를 인수합니다.</p>
       </div>
       <nav>
         <button type="button" class="secondary" @click="router.push({ name: 'dashboard' })">
+          <LayoutDashboard :size="16" :stroke-width="1.8" aria-hidden="true" />
           대시보드
         </button>
         <button type="button" class="secondary" @click="router.push({ name: 'receivables' })">
+          <Files :size="16" :stroke-width="1.8" aria-hidden="true" />
           매출채권 관리
         </button>
         <button type="button" :disabled="isLoading" @click="refreshPage">
+          <RefreshCw
+            :size="16"
+            :stroke-width="1.8"
+            :class="{ 'icon-spin': isLoading }"
+            aria-hidden="true"
+          />
           {{ isLoading ? '조회 중...' : '최신 상태 조회' }}
         </button>
       </nav>
     </header>
 
-    <p v-if="errorMessage" class="notice error" role="alert">
-      {{ errorMessage }}
-    </p>
-    <p v-if="successMessage" class="notice success" role="status">
-      {{ successMessage }}
-    </p>
-    <p v-if="actionStage" class="notice progress" role="status">
-      {{ actionStage }}
-    </p>
+    <div v-if="errorMessage" class="notice error" role="alert">
+      <TriangleAlert :size="18" :stroke-width="1.8" aria-hidden="true" />
+      <span>{{ errorMessage }}</span>
+    </div>
+    <div v-if="successMessage" class="notice success" role="status">
+      <Check :size="18" :stroke-width="2" aria-hidden="true" />
+      <span>{{ successMessage }}</span>
+    </div>
+    <div v-if="actionStage" class="notice progress" role="status">
+      <LoaderCircle :size="18" :stroke-width="1.8" class="icon-spin" aria-hidden="true" />
+      <span>{{ actionStage }}</span>
+    </div>
 
     <section class="workspace" :aria-busy="isLoading">
       <aside class="opportunity-panel">
-        <h2>펀딩 가능 채권</h2>
+        <div class="panel-heading">
+          <h2>펀딩 가능 채권</h2>
+          <span v-if="hasLoadedOpportunities">{{ opportunities.length }}</span>
+        </div>
         <p v-if="isLoading" class="empty loading-state" role="status">
           펀딩 가능 채권을 불러오고 있습니다...
         </p>
@@ -590,7 +621,10 @@ function shortAddress(value) {
           :aria-pressed="sameId(receivable.receivableId, selectedReceivable?.receivableId)"
           @click="selectOpportunity(receivable.receivableId)"
         >
-          <span>#{{ receivable.receivableId }} · NFT #{{ receivable.tokenId }}</span>
+          <span class="opportunity-meta">
+            <span>#{{ receivable.receivableId }} · NFT #{{ receivable.tokenId }}</span>
+            <ChevronRight :size="16" :stroke-width="1.8" aria-hidden="true" />
+          </span>
           <strong> {{ receivable.sellerCompanyName }} → {{ receivable.buyerCompanyName }} </strong>
           <span>필요 자금 {{ formatAmount(receivable.fundingAmount) }}</span>
           <small>만기 {{ receivable.maturityDate }}</small>
@@ -609,6 +643,7 @@ function shortAddress(value) {
             <h2>채권 #{{ selectedReceivable.receivableId }}</h2>
           </div>
           <span class="wallet-label">
+            <Wallet :size="16" :stroke-width="1.8" aria-hidden="true" />
             Funder 지갑 {{ shortAddress(walletStore.walletAddress) }}
           </span>
         </div>
@@ -649,7 +684,10 @@ function shortAddress(value) {
         </dl>
 
         <section v-if="selectedReceivable.status === 'FUNDED'" class="completed-card" role="status">
-          <h3>Funding 완료</h3>
+          <div class="callout-heading">
+            <Check :size="18" :stroke-width="2" aria-hidden="true" />
+            <h3>Funding 완료</h3>
+          </div>
           <p>
             {{ selectedReceivable.funderCompanyName || 'Funder' }}의 자금 공급이 서버에
             반영되었습니다. NFT 소유권과 mKRW 지급은 온체인 트랜잭션으로 검증되었습니다.
@@ -657,9 +695,13 @@ function shortAddress(value) {
         </section>
 
         <section v-else-if="pendingForSelected" class="recovery-card" role="alert">
-          <h3>기존 펀딩 작업을 먼저 완료해 주세요</h3>
+          <div class="callout-heading">
+            <RotateCcw :size="18" :stroke-width="1.8" aria-hidden="true" />
+            <h3>기존 펀딩 작업을 먼저 완료해 주세요</h3>
+          </div>
           <p>{{ journalMessage }}</p>
           <button type="button" :disabled="isActionRunning" @click="retryPending">
+            <RotateCcw :size="16" :stroke-width="1.8" aria-hidden="true" />
             {{ isActionRunning ? '처리 중...' : retryButtonLabel }}
           </button>
         </section>
@@ -670,7 +712,10 @@ function shortAddress(value) {
             class="journal-gate"
             :class="{ blocked: journalGate === 'blocked' || journalGate === 'error' }"
           >
-            <strong>기존 트랜잭션 안전 점검</strong>
+            <div class="callout-heading">
+              <ShieldCheck :size="18" :stroke-width="1.8" aria-hidden="true" />
+              <strong>기존 트랜잭션 안전 점검</strong>
+            </div>
             <p>{{ journalMessage }}</p>
             <button
               v-if="journalGate === 'error'"
@@ -678,6 +723,7 @@ function shortAddress(value) {
               class="secondary"
               @click="selectOpportunity(selectedReceivable.receivableId)"
             >
+              <RefreshCw :size="16" :stroke-width="1.8" aria-hidden="true" />
               이력 다시 조회
             </button>
           </div>
@@ -699,33 +745,63 @@ function shortAddress(value) {
             </div>
 
             <p v-if="!readiness.hasSufficientBalance" class="insufficient" role="alert">
-              mKRW 잔액이 부족합니다. MockKRW 배포자(owner)가 현재 Funder 지갑에 최소 필요 금액을
-              mint한 뒤 최신 상태를 조회해 주세요.
+              <TriangleAlert :size="18" :stroke-width="1.8" aria-hidden="true" />
+              <span>
+                mKRW 잔액이 부족합니다. MockKRW 배포자(owner)가 현재 Funder 지갑에 최소 필요 금액을
+                mint한 뒤 최신 상태를 조회해 주세요.
+              </span>
             </p>
 
-            <div class="step-card" :class="{ complete: readiness.hasSufficientAllowance }">
-              <span>1단계</span>
-              <h3>mKRW 사용 승인</h3>
-              <p>
-                ReceivableFinance가 정확히
-                {{ formatAmount(readiness.fundingAmount) }}를 사용할 수 있도록 승인합니다.
-              </p>
-              <button type="button" :disabled="!canApprove" @click="approveMkrw">
-                {{ readiness.hasSufficientAllowance ? '승인 완료' : 'MetaMask로 mKRW 사용 승인' }}
-              </button>
-            </div>
+            <ol class="workflow-timeline" aria-label="펀딩 진행 단계">
+              <li
+                class="workflow-step"
+                :class="{
+                  'is-complete': readiness.hasSufficientAllowance,
+                  'is-active': canApprove,
+                }"
+              >
+                <span class="workflow-marker" aria-hidden="true">
+                  <Check v-if="readiness.hasSufficientAllowance" :size="16" :stroke-width="2" />
+                  <span v-else>1</span>
+                </span>
+                <div class="workflow-content">
+                  <span class="step-label">1단계</span>
+                  <h3>mKRW 사용 승인</h3>
+                  <p>
+                    ReceivableFinance가 정확히
+                    {{ formatAmount(readiness.fundingAmount) }}를 사용할 수 있도록 승인합니다.
+                  </p>
+                  <button type="button" :disabled="!canApprove" @click="approveMkrw">
+                    <Check
+                      v-if="readiness.hasSufficientAllowance"
+                      :size="16"
+                      :stroke-width="2"
+                      aria-hidden="true"
+                    />
+                    <Wallet v-else :size="16" :stroke-width="1.8" aria-hidden="true" />
+                    {{
+                      readiness.hasSufficientAllowance ? '승인 완료' : 'MetaMask로 mKRW 사용 승인'
+                    }}
+                  </button>
+                </div>
+              </li>
 
-            <div class="step-card" :class="{ enabled: canFund }">
-              <span>2단계</span>
-              <h3>채권 자금 공급</h3>
-              <p>
-                이 트랜잭션은 Seller에게 mKRW를 지급하고 NFT를 Funder 지갑으로 이전합니다. 승인
-                후에도 자동 실행되지 않습니다.
-              </p>
-              <button type="button" :disabled="!canFund" @click="startFunding">
-                MetaMask로 자금 공급
-              </button>
-            </div>
+              <li class="workflow-step" :class="{ 'is-active': canFund }">
+                <span class="workflow-marker" aria-hidden="true">2</span>
+                <div class="workflow-content">
+                  <span class="step-label">2단계</span>
+                  <h3>채권 자금 공급</h3>
+                  <p>
+                    이 트랜잭션은 Seller에게 mKRW를 지급하고 NFT를 Funder 지갑으로 이전합니다. 승인
+                    후에도 자동 실행되지 않습니다.
+                  </p>
+                  <button type="button" :disabled="!canFund" @click="startFunding">
+                    <HandCoins :size="16" :stroke-width="1.8" aria-hidden="true" />
+                    MetaMask로 자금 공급
+                  </button>
+                </div>
+              </li>
+            </ol>
           </template>
         </section>
 
@@ -736,6 +812,7 @@ function shortAddress(value) {
           target="_blank"
           rel="noopener noreferrer"
         >
+          <ExternalLink :size="16" :stroke-width="1.8" aria-hidden="true" />
           Explorer에서 트랜잭션 확인
         </a>
       </article>
@@ -756,35 +833,47 @@ function shortAddress(value) {
 
 <style scoped>
 .funding-page {
+  --primary: #0b7654;
+  --primary-soft: rgba(11, 118, 84, 0.06);
+  --ink: #111827;
+  --text: #374151;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --surface: #ffffff;
+  --subtle: #f8fafc;
+
   min-height: 100%;
   padding: 32px;
-  background: #f4f8f5;
-  color: #15352b;
+  background: var(--subtle);
+  color: var(--ink);
 }
 
 .page-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  max-width: 1180px;
+  max-width: var(--content-width, 1200px);
   margin: 0 auto 24px;
   gap: 24px;
 }
 
 .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
-  color: #0b7654;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 650;
 }
 
 h1 {
-  margin: 6px 0 8px;
+  margin: 8px 0;
   font-size: 32px;
-  font-weight: 750;
+  font-weight: 700;
   line-height: 1.25;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 h2,
@@ -794,23 +883,23 @@ p {
 }
 
 h2 {
-  color: #15352b;
+  color: var(--ink);
   font-size: 20px;
-  font-weight: 750;
+  font-weight: 700;
   line-height: 1.35;
 }
 
 h3 {
-  color: #15352b;
+  color: var(--ink);
   font-size: 16px;
-  font-weight: 750;
+  font-weight: 700;
   line-height: 1.4;
 }
 
 .page-header p {
   max-width: 720px;
   margin-bottom: 0;
-  color: #62736b;
+  color: var(--muted);
   line-height: 1.6;
 }
 
@@ -822,38 +911,42 @@ nav {
 }
 
 button {
-  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
   border: 0;
-  border-radius: 9px;
-  padding: 11px 14px;
-  background: #0b7654;
+  border-radius: 8px;
+  padding: 8px 16px;
+  background: var(--primary);
   color: white;
   cursor: pointer;
-  font-weight: 700;
+  font-weight: 650;
   transition:
     border-color 0.16s ease,
     background-color 0.16s ease,
-    box-shadow 0.16s ease,
     color 0.16s ease;
 }
 
-button:not(.opportunity-card):hover:not(:disabled) {
-  background: #075f44;
+button:not(.opportunity-card):not(.secondary):hover:not(:disabled) {
+  background: var(--primary);
+  filter: brightness(0.9);
 }
 
 button.secondary {
-  border: 1px solid #bdcbc4;
-  background: #ffffff;
-  color: #315548;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
 }
 
 button.secondary:hover:not(:disabled) {
-  border-color: #8fb3a3;
-  background: #f1f7f4;
+  border-color: #9ca3af;
+  background: var(--subtle);
 }
 
 button:focus-visible {
-  outline: 3px solid rgba(11, 118, 84, 0.28);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -863,120 +956,172 @@ button:disabled {
 }
 
 .notice {
-  max-width: 1180px;
-  margin: 0 auto 14px;
-  padding: 13px 16px;
-  border-radius: 9px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: var(--content-width, 1200px);
+  margin: 0 auto 16px;
+  padding: 16px;
+  border-radius: 8px;
   overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 1.55;
 }
 
+.notice svg {
+  flex: 0 0 auto;
+}
+
 .notice.error {
-  border: 1px solid #efb4b4;
-  background: #fff2f2;
-  color: #941f1f;
+  border: 1px solid #fecaca;
+  background: #fff7f7;
+  color: #991b1b;
 }
 
 .notice.success {
-  border: 1px solid #a8d6c4;
-  background: #edfaf4;
-  color: #086245;
+  border: 1px solid rgba(11, 118, 84, 0.24);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .notice.progress {
-  border: 1px solid #b8d4c8;
-  background: #eff7f3;
-  color: #315548;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.icon-spin {
+  animation: funding-icon-spin 0.8s linear infinite;
+}
+
+@keyframes funding-icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   align-items: start;
-  max-width: 1180px;
-  min-height: 620px;
+  overflow: hidden;
+  max-width: var(--content-width, 1200px);
+  min-height: 640px;
   margin: 0 auto;
-  gap: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
 }
 
 .opportunity-panel,
 .detail-panel {
-  border: 1px solid #dce5e0;
-  border-radius: 16px;
-  padding: 24px;
-  background: #ffffff;
-  box-shadow: 0 8px 24px rgba(24, 62, 48, 0.045);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .opportunity-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-self: stretch;
+  padding: 24px 0;
+  border-right: 1px solid var(--border);
 }
 
-.opportunity-panel h2 {
-  margin-bottom: 6px;
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 24px 16px;
+}
+
+.panel-heading h2 {
+  margin: 0;
+}
+
+.panel-heading > span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 8px;
+  background: var(--subtle);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
 }
 
 .opportunity-card {
+  position: relative;
   display: grid;
   width: 100%;
   margin: 0;
-  gap: 5px;
-  padding: 14px 16px;
-  border: 1px solid #dfe5e1;
-  border-radius: 11px;
-  background: #ffffff;
-  color: #315548;
+  gap: 8px;
+  padding: 16px 24px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
   line-height: 1.45;
   text-align: left;
 }
 
 .opportunity-card:hover:not(:disabled):not(.selected) {
-  border-color: #a8bdb3;
-  background: #f8fbf9;
+  background: var(--subtle);
 }
 
 .opportunity-card.selected {
-  border-color: #0b7654;
-  background: #eaf6f0;
-  box-shadow:
-    0 0 0 1px rgba(11, 118, 84, 0.14),
-    inset 3px 0 0 #0b7654;
+  border-left: 2px solid var(--primary);
+  background: var(--primary-soft);
+  color: var(--ink);
 }
 
 .opportunity-card strong {
-  color: #15352b;
-  font-weight: 750;
+  color: var(--ink);
+  font-weight: 700;
 }
 
-.opportunity-card > span:first-child {
-  color: #62736b;
+.opportunity-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 700;
 }
 
+.opportunity-meta svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.opportunity-card.selected .opportunity-meta svg {
+  color: var(--primary);
+}
+
 .opportunity-card small {
-  color: #6a7c74;
+  color: var(--muted);
 }
 
 .empty {
-  margin: 0;
-  padding: 14px 16px;
-  border: 1px solid #e1e9e5;
-  border-radius: 10px;
-  background: #f8fbf9;
-  color: #77877f;
+  margin: 0 24px;
+  padding: 16px 0;
+  color: var(--muted);
   line-height: 1.6;
 }
 
 .loading-state {
-  color: #315548;
+  color: var(--text);
 }
 
 .detail-panel {
   min-width: 0;
+  padding: 32px;
 }
 
 .detail-heading {
@@ -985,33 +1130,43 @@ button:disabled {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px;
-  margin-bottom: 22px;
+  margin-bottom: 24px;
 }
 
 .detail-heading h2 {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
 }
 
 .status {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   border-radius: 999px;
-  padding: 4px 9px;
-  background: #ddf3e8;
-  color: #08714f;
+  padding: 0 8px;
+  background: var(--primary-soft);
+  color: var(--primary);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .wallet-label {
+  display: inline-flex;
+  align-items: center;
   max-width: 100%;
   overflow: hidden;
+  gap: 8px;
   border-radius: 999px;
-  padding: 7px 10px;
-  background: #f1f5f3;
-  color: #52675e;
+  padding: 8px 16px;
+  background: var(--subtle);
+  color: var(--text);
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.wallet-label svg {
+  flex: 0 0 auto;
+  color: var(--primary);
 }
 
 .terms {
@@ -1024,19 +1179,20 @@ button:disabled {
 
 .terms div {
   min-width: 0;
-  border-bottom: 1px solid #edf1ee;
-  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 0;
 }
 
 .terms dt {
-  color: #77877f;
+  color: var(--muted);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .terms dd {
-  margin: 5px 0 0;
-  font-weight: 700;
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-weight: 650;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
@@ -1050,53 +1206,55 @@ button:disabled {
 .funding-steps,
 .recovery-card {
   display: grid;
-  gap: 14px;
+  gap: 24px;
 }
 
 .balance-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .balance-grid div {
   display: grid;
-  gap: 6px;
-  min-height: 82px;
-  border: 1px solid #e3ebe7;
-  border-radius: 10px;
-  padding: 14px;
-  background: #f4f8f5;
+  gap: 8px;
+  min-height: 80px;
+  padding: 16px;
+  background: transparent;
+}
+
+.balance-grid div + div {
+  border-left: 1px solid var(--border);
 }
 
 .balance-grid span,
-.step-card > span {
-  color: #62736b;
+.step-label {
+  color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .balance-grid strong {
-  color: #15352b;
+  color: var(--ink);
   font-size: 17px;
-  font-weight: 750;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.step-card,
 .journal-gate,
 .recovery-card,
 .completed-card {
   display: grid;
   gap: 8px;
-  border: 1px solid #d9e3de;
-  border-radius: 12px;
-  padding: 18px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 16px;
   line-height: 1.6;
 }
 
-.step-card h3,
-.step-card p,
 .journal-gate p,
 .recovery-card h3,
 .recovery-card p,
@@ -1105,81 +1263,179 @@ button:disabled {
   margin: 0;
 }
 
-.step-card.complete {
-  border-color: #91cdb5;
-  background: #effaf5;
-}
-
-.step-card.complete button:disabled {
-  cursor: default;
-  background: #d9eee4;
-  color: #0b6548;
-  opacity: 1;
-}
-
-.step-card.enabled {
-  border-color: #0b7654;
-  background: #fbfefc;
-  box-shadow: 0 0 0 1px rgba(11, 118, 84, 0.1);
-}
-
-.step-card button,
 .journal-gate button,
 .recovery-card button {
   width: fit-content;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
-.step-card p,
 .journal-gate p,
 .recovery-card p {
-  color: #62736b;
+  color: var(--muted);
 }
 
 .journal-gate {
-  background: #f4f8f5;
+  background: var(--subtle);
 }
 
 .journal-gate.blocked {
-  border-color: #efb4b4;
-  background: #fff4f4;
+  border-color: #fecaca;
+  border-left-color: #b91c1c;
+  background: #fff7f7;
 }
 
 .recovery-card {
-  border-color: #d5c27a;
-  background: #fffbea;
+  border-color: #fde68a;
+  border-left-color: #a16207;
+  background: #fffbeb;
 }
 
 .completed-card {
-  border-color: #91cdb5;
-  background: #effaf5;
+  border-color: rgba(11, 118, 84, 0.24);
+  border-left-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .completed-card p {
-  color: #315548;
+  color: var(--text);
+}
+
+.callout-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.callout-heading svg {
+  flex: 0 0 auto;
+}
+
+.completed-card .callout-heading,
+.completed-card .callout-heading h3 {
+  color: var(--primary);
 }
 
 .insufficient {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin: 0;
-  border: 1px solid #efc0c0;
+  border: 1px solid #fecaca;
+  border-left: 3px solid #b91c1c;
   border-radius: 8px;
-  padding: 12px;
-  background: #fff2f2;
-  color: #941f1f;
+  padding: 16px;
+  background: #fff7f7;
+  color: #991b1b;
   line-height: 1.55;
+}
+
+.insufficient svg {
+  flex: 0 0 auto;
+}
+
+.workflow-timeline {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 16px;
+  padding-bottom: 32px;
+}
+
+.workflow-step:last-child {
+  padding-bottom: 0;
+}
+
+.workflow-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 32px;
+  bottom: 0;
+  left: 15px;
+  width: 1px;
+  background: var(--border);
+}
+
+.workflow-step.is-complete:not(:last-child)::after {
+  background: rgba(11, 118, 84, 0.4);
+}
+
+.workflow-marker {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workflow-step.is-active .workflow-marker {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.workflow-step.is-complete .workflow-marker {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--surface);
+}
+
+.workflow-content {
+  min-width: 0;
+}
+
+.workflow-content h3 {
+  margin: 0;
+}
+
+.workflow-content p {
+  max-width: 680px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.step-label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.workflow-content button {
+  width: fit-content;
+  margin-top: 16px;
+}
+
+.workflow-step.is-complete .workflow-content button:disabled {
+  cursor: default;
+  border: 1px solid rgba(11, 118, 84, 0.24);
+  background: var(--primary-soft);
+  color: var(--primary);
+  opacity: 1;
 }
 
 .explorer-link {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
-  margin-top: 18px;
-  padding: 7px 11px;
-  border: 1px solid #0b7654;
+  gap: 8px;
+  min-height: 40px;
+  margin-top: 24px;
+  padding: 8px 16px;
+  border: 1px solid var(--primary);
   border-radius: 8px;
-  background: #ffffff;
-  color: #0b7654;
-  font-weight: 700;
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 650;
   text-decoration: none;
   transition:
     border-color 0.16s ease,
@@ -1188,13 +1444,11 @@ button:disabled {
 }
 
 .explorer-link:hover {
-  border-color: #075f44;
-  background: #eaf6ef;
-  color: #075f44;
+  background: var(--primary-soft);
 }
 
 .explorer-link:focus-visible {
-  outline: 3px solid rgba(11, 118, 84, 0.24);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -1203,13 +1457,13 @@ button:disabled {
   min-height: 320px;
   align-content: center;
   justify-items: center;
-  color: #62736b;
+  color: var(--muted);
   text-align: center;
 }
 
 @media (max-width: 900px) {
   .funding-page {
-    padding: 20px;
+    padding: 24px;
   }
 
   .page-header {
@@ -1225,6 +1479,11 @@ button:disabled {
     min-height: 0;
   }
 
+  .opportunity-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
   .detail-heading {
     align-items: flex-start;
   }
@@ -1233,11 +1492,16 @@ button:disabled {
   .balance-grid {
     grid-template-columns: 1fr;
   }
+
+  .balance-grid div + div {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
 }
 
 @media (max-width: 560px) {
   .funding-page {
-    padding: 20px 16px 32px;
+    padding: 16px 16px 32px;
   }
 
   h1 {
@@ -1249,22 +1513,41 @@ button:disabled {
   }
 
   nav button {
-    flex: 1 1 140px;
+    flex: 1 1 144px;
   }
 
-  .opportunity-panel,
+  .opportunity-panel {
+    padding: 16px 0;
+  }
+
+  .panel-heading,
+  .empty {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+
+  .opportunity-card {
+    padding: 16px;
+  }
+
   .detail-panel {
-    padding: 18px;
+    padding: 24px 16px;
   }
 
   .wallet-label {
     width: 100%;
   }
 
-  .step-card button,
+  .workflow-content button,
   .journal-gate button,
   .recovery-card button {
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-spin {
+    animation: none;
   }
 }
 </style>

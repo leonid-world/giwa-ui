@@ -1,4 +1,19 @@
 <script setup>
+import {
+  Check,
+  ChevronRight,
+  CircleCheckBig,
+  ExternalLink,
+  FileText,
+  LayoutDashboard,
+  LoaderCircle,
+  ReceiptText,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  TriangleAlert,
+  WalletCards,
+} from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { transactionExplorerUrl } from '../contracts/addresses'
@@ -535,30 +550,37 @@ function shortAddress(value) {
   <main class="repayment-page">
     <header class="page-header">
       <div>
-        <p class="eyebrow">GIWA REPAYMENT</p>
+        <p class="section-label"><ReceiptText :size="16" aria-hidden="true" /> 상환 워크플로</p>
         <h1>매출채권 상환</h1>
         <p>Buyer가 채권 금액만큼 mKRW를 지급해 FUNDED 채권을 상환합니다.</p>
       </div>
       <nav>
         <button type="button" class="secondary" @click="router.push({ name: 'dashboard' })">
+          <LayoutDashboard :size="16" aria-hidden="true" />
           대시보드
         </button>
         <button type="button" class="secondary" @click="router.push({ name: 'receivables' })">
+          <FileText :size="16" aria-hidden="true" />
           매출채권 관리
         </button>
         <button type="button" :disabled="isLoading" @click="refreshPage">
+          <LoaderCircle v-if="isLoading" :size="16" class="spin" aria-hidden="true" />
+          <RefreshCw v-else :size="16" aria-hidden="true" />
           {{ isLoading ? '조회 중...' : '최신 상태 조회' }}
         </button>
       </nav>
     </header>
 
     <p v-if="errorMessage" class="notice error" role="alert">
+      <TriangleAlert :size="16" aria-hidden="true" />
       {{ errorMessage }}
     </p>
     <p v-if="successMessage" class="notice success" role="status">
+      <CircleCheckBig :size="16" aria-hidden="true" />
       {{ successMessage }}
     </p>
     <p v-if="actionStage" class="notice progress" role="status">
+      <LoaderCircle :size="16" class="spin" aria-hidden="true" />
       {{ actionStage }}
     </p>
 
@@ -586,10 +608,13 @@ function shortAddress(value) {
           :aria-pressed="sameId(receivable.receivableId, selectedReceivable?.receivableId)"
           @click="selectObligation(receivable.receivableId)"
         >
-          <span>#{{ receivable.receivableId }} · NFT #{{ receivable.tokenId }}</span>
-          <strong>{{ receivable.sellerCompanyName }} → {{ receivable.buyerCompanyName }}</strong>
-          <span>상환 금액 {{ formatAmount(receivable.faceValue) }}</span>
-          <small>만기 {{ receivable.maturityDate }}</small>
+          <span class="opportunity-copy">
+            <span>#{{ receivable.receivableId }} · NFT #{{ receivable.tokenId }}</span>
+            <strong>{{ receivable.sellerCompanyName }} → {{ receivable.buyerCompanyName }}</strong>
+            <span>상환 금액 {{ formatAmount(receivable.faceValue) }}</span>
+            <small>만기 {{ receivable.maturityDate }}</small>
+          </span>
+          <ChevronRight :size="18" aria-hidden="true" />
         </button>
       </aside>
 
@@ -605,6 +630,7 @@ function shortAddress(value) {
             <h2>채권 #{{ selectedReceivable.receivableId }}</h2>
           </div>
           <span class="wallet-label">
+            <WalletCards :size="16" aria-hidden="true" />
             Buyer 지갑 {{ shortAddress(walletStore.walletAddress) }}
           </span>
         </div>
@@ -647,7 +673,10 @@ function shortAddress(value) {
         </dl>
 
         <section v-if="selectedReceivable.status === 'REPAID'" class="completed-card" role="status">
-          <h3>상환 완료</h3>
+          <div class="callout-heading">
+            <CircleCheckBig :size="18" aria-hidden="true" />
+            <h3>상환 완료</h3>
+          </div>
           <p>
             Buyer 상환이 서버에 반영되었습니다. mKRW 지급과 REPAID 상태는 온체인 트랜잭션으로
             검증되었습니다.
@@ -655,9 +684,14 @@ function shortAddress(value) {
         </section>
 
         <section v-else-if="pendingForSelected" class="recovery-card" role="alert">
-          <h3>기존 상환 작업을 먼저 완료해 주세요</h3>
+          <div class="callout-heading">
+            <RotateCcw :size="18" aria-hidden="true" />
+            <h3>기존 상환 작업을 먼저 완료해 주세요</h3>
+          </div>
           <p>{{ journalMessage }}</p>
           <button type="button" :disabled="isActionRunning" @click="retryPending">
+            <LoaderCircle v-if="isActionRunning" :size="16" class="spin" aria-hidden="true" />
+            <RotateCcw v-else :size="16" aria-hidden="true" />
             {{ isActionRunning ? '처리 중...' : retryButtonLabel }}
           </button>
         </section>
@@ -668,7 +702,10 @@ function shortAddress(value) {
             class="journal-gate"
             :class="{ blocked: journalGate === 'blocked' || journalGate === 'error' }"
           >
-            <strong>기존 트랜잭션 안전 점검</strong>
+            <strong class="callout-heading">
+              <ShieldCheck :size="18" aria-hidden="true" />
+              기존 트랜잭션 안전 점검
+            </strong>
             <p>{{ journalMessage }}</p>
             <button
               v-if="journalGate === 'error'"
@@ -676,6 +713,7 @@ function shortAddress(value) {
               class="secondary"
               @click="selectObligation(selectedReceivable.receivableId)"
             >
+              <RefreshCw :size="16" aria-hidden="true" />
               이력 다시 조회
             </button>
           </div>
@@ -697,38 +735,66 @@ function shortAddress(value) {
             </div>
 
             <p class="recipient-notice">
-              상환금은 트랜잭션 실행 시점의 NFT 소유자에게 지급됩니다. 현재 조회된 수취인은
-              {{ shortAddress(readiness.recipientWalletAddress) }}입니다.
+              <WalletCards :size="16" aria-hidden="true" />
+              <span>
+                상환금은 트랜잭션 실행 시점의 NFT 소유자에게 지급됩니다. 현재 조회된 수취인은
+                {{ shortAddress(readiness.recipientWalletAddress) }}입니다.
+              </span>
             </p>
 
             <p v-if="!readiness.hasSufficientBalance" class="insufficient" role="alert">
-              mKRW 잔액이 부족합니다. MockKRW 배포자(owner)가 현재 Buyer 지갑에 최소 필요 금액을
-              mint한 뒤 최신 상태를 조회해 주세요.
+              <TriangleAlert :size="16" aria-hidden="true" />
+              <span>
+                mKRW 잔액이 부족합니다. MockKRW 배포자(owner)가 현재 Buyer 지갑에 최소 필요 금액을
+                mint한 뒤 최신 상태를 조회해 주세요.
+              </span>
             </p>
 
-            <div class="step-card" :class="{ complete: readiness.hasSufficientAllowance }">
-              <span>1단계</span>
-              <h3>mKRW 사용 승인</h3>
-              <p>
-                ReceivableFinance가 정확히
-                {{ formatAmount(readiness.faceValue) }}를 사용할 수 있도록 승인합니다.
-              </p>
-              <button type="button" :disabled="!canApprove" @click="approveMkrw">
-                {{ readiness.hasSufficientAllowance ? '승인 완료' : 'MetaMask로 mKRW 사용 승인' }}
-              </button>
-            </div>
+            <ol class="workflow-timeline" aria-label="상환 진행 단계">
+              <li
+                class="workflow-step"
+                :class="{
+                  'is-complete': readiness.hasSufficientAllowance,
+                  'is-active': canApprove,
+                }"
+              >
+                <span class="workflow-marker" aria-hidden="true">
+                  <Check v-if="readiness.hasSufficientAllowance" :size="16" />
+                  <span v-else>1</span>
+                </span>
+                <div class="workflow-content">
+                  <span class="step-label">1단계</span>
+                  <h3>mKRW 사용 승인</h3>
+                  <p>
+                    ReceivableFinance가 정확히
+                    {{ formatAmount(readiness.faceValue) }}를 사용할 수 있도록 승인합니다.
+                  </p>
+                  <button type="button" :disabled="!canApprove" @click="approveMkrw">
+                    <Check v-if="readiness.hasSufficientAllowance" :size="16" aria-hidden="true" />
+                    <ShieldCheck v-else :size="16" aria-hidden="true" />
+                    {{
+                      readiness.hasSufficientAllowance ? '승인 완료' : 'MetaMask로 mKRW 사용 승인'
+                    }}
+                  </button>
+                </div>
+              </li>
 
-            <div class="step-card" :class="{ enabled: canRepay }">
-              <span>2단계</span>
-              <h3>채권 상환</h3>
-              <p>
-                이 트랜잭션은 현재 NFT 소유자에게 채권 금액만큼 mKRW를 지급하고 채권 상태를 REPAID로
-                변경합니다. 승인 후에도 자동 실행되지 않습니다.
-              </p>
-              <button type="button" :disabled="!canRepay" @click="startRepayment">
-                MetaMask로 채권 상환
-              </button>
-            </div>
+              <li class="workflow-step" :class="{ 'is-active': canRepay }">
+                <span class="workflow-marker" aria-hidden="true">2</span>
+                <div class="workflow-content">
+                  <span class="step-label">2단계</span>
+                  <h3>채권 상환</h3>
+                  <p>
+                    이 트랜잭션은 현재 NFT 소유자에게 채권 금액만큼 mKRW를 지급하고 채권 상태를
+                    REPAID로 변경합니다. 승인 후에도 자동 실행되지 않습니다.
+                  </p>
+                  <button type="button" :disabled="!canRepay" @click="startRepayment">
+                    <ReceiptText :size="16" aria-hidden="true" />
+                    MetaMask로 채권 상환
+                  </button>
+                </div>
+              </li>
+            </ol>
           </template>
         </section>
 
@@ -740,6 +806,7 @@ function shortAddress(value) {
           rel="noopener noreferrer"
         >
           Explorer에서 트랜잭션 확인
+          <ExternalLink :size="16" aria-hidden="true" />
         </a>
       </article>
 
@@ -760,34 +827,36 @@ function shortAddress(value) {
 <style scoped>
 .repayment-page {
   min-height: 100%;
-  padding: 32px;
-  background: #f4f8f5;
-  color: #15352b;
+  padding: var(--space-5, 40px) var(--space-4, 32px) var(--space-7, 56px);
+  background: var(--color-canvas, #f8faf9);
+  color: var(--color-text, #17221d);
 }
 
 .page-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  max-width: 1180px;
-  margin: 0 auto 24px;
-  gap: 24px;
+  max-width: var(--content-width, 1200px);
+  margin: 0 auto var(--space-4, 32px);
+  gap: var(--space-4, 32px);
 }
 
-.eyebrow {
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 8px);
   margin: 0;
-  color: #0b7654;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  color: var(--color-brand, #0b7654);
+  font-size: 14px;
+  font-weight: 650;
 }
 
 h1 {
-  margin: 6px 0 8px;
+  margin: var(--space-1, 8px) 0;
   font-size: 32px;
-  font-weight: 750;
+  font-weight: 700;
   line-height: 1.25;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 h2,
@@ -797,23 +866,23 @@ p {
 }
 
 h2 {
-  color: #15352b;
+  color: var(--color-text, #17221d);
   font-size: 20px;
-  font-weight: 750;
+  font-weight: 650;
   line-height: 1.35;
 }
 
 h3 {
-  color: #15352b;
+  color: var(--color-text, #17221d);
   font-size: 16px;
-  font-weight: 750;
+  font-weight: 650;
   line-height: 1.4;
 }
 
 .page-header p {
   max-width: 720px;
   margin-bottom: 0;
-  color: #62736b;
+  color: var(--color-text-muted, #66736d);
   line-height: 1.6;
 }
 
@@ -821,23 +890,27 @@ nav {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-1, 8px);
 }
 
 button {
-  min-height: 42px;
-  border: 0;
-  border-radius: 9px;
-  padding: 11px 14px;
-  background: #0b7654;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1, 8px);
+  min-height: 40px;
+  border: 1px solid var(--color-brand, #0b7654);
+  border-radius: var(--radius-md, 8px);
+  padding: 8px 16px;
+  background: var(--color-brand, #0b7654);
   color: white;
   cursor: pointer;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 650;
   transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    box-shadow 0.16s ease,
-    color 0.16s ease;
+    border-color var(--transition-fast, 150ms ease),
+    background-color var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
 }
 
 button:not(.opportunity-card):hover:not(:disabled) {
@@ -845,14 +918,15 @@ button:not(.opportunity-card):hover:not(:disabled) {
 }
 
 button.secondary {
-  border: 1px solid #bdcbc4;
-  background: #ffffff;
-  color: #315548;
+  border-color: var(--color-border-strong, #cbd5d0);
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #17221d);
 }
 
 button.secondary:hover:not(:disabled) {
-  border-color: #8fb3a3;
-  background: #f1f7f4;
+  border-color: var(--color-brand, #0b7654);
+  background: var(--color-brand-soft, #eff8f4);
+  color: var(--color-brand, #0b7654);
 }
 
 button:focus-visible {
@@ -866,13 +940,21 @@ button:disabled {
 }
 
 .notice {
-  max-width: 1180px;
-  margin: 0 auto 14px;
-  padding: 13px 16px;
-  border-radius: 9px;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1, 8px);
+  max-width: var(--content-width, 1200px);
+  margin: 0 auto var(--space-2, 16px);
+  padding: 16px;
+  border-radius: var(--radius-md, 8px);
   overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 1.55;
+}
+
+.notice svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 
 .notice.error {
@@ -882,82 +964,98 @@ button:disabled {
 }
 
 .notice.success {
-  border: 1px solid #a8d6c4;
-  background: #edfaf4;
-  color: #086245;
+  border: 1px solid #b8d8ca;
+  background: var(--color-brand-soft, #eff8f4);
+  color: var(--color-brand, #0b7654);
 }
 
 .notice.progress {
-  border: 1px solid #b8d4c8;
-  background: #eff7f3;
-  color: #315548;
+  border: 1px solid var(--color-border, #e2e7e4);
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text-muted, #66736d);
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
-  align-items: start;
-  max-width: 1180px;
+  grid-template-columns: minmax(288px, 360px) minmax(0, 1fr);
+  align-items: stretch;
+  max-width: var(--content-width, 1200px);
   min-height: 620px;
   margin: 0 auto;
-  gap: 20px;
+  overflow: hidden;
+  border: 1px solid var(--color-border, #e2e7e4);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--color-surface, #ffffff);
 }
 
 .opportunity-panel,
 .detail-panel {
-  border: 1px solid #dce5e0;
-  border-radius: 16px;
-  padding: 24px;
-  background: #ffffff;
-  box-shadow: 0 8px 24px rgba(24, 62, 48, 0.045);
+  border: 0;
+  border-radius: 0;
+  padding: var(--space-4, 32px);
+  background: transparent;
+  box-shadow: none;
 }
 
 .opportunity-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
+  border-right: 1px solid var(--color-border, #e2e7e4);
 }
 
 .opportunity-panel h2 {
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3, 24px);
 }
 
 .opportunity-card {
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
   margin: 0;
-  gap: 5px;
-  padding: 14px 16px;
-  border: 1px solid #dfe5e1;
-  border-radius: 11px;
-  background: #ffffff;
-  color: #315548;
+  gap: var(--space-2, 16px);
+  padding: 16px 8px 16px 16px;
+  border: 0;
+  border-top: 1px solid var(--color-border, #e2e7e4);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-muted, #66736d);
   line-height: 1.45;
   text-align: left;
 }
 
 .opportunity-card:hover:not(:disabled):not(.selected) {
-  border-color: #a8bdb3;
-  background: #f8fbf9;
+  background: var(--color-canvas, #f8faf9);
 }
 
 .opportunity-card.selected {
-  border-color: #0b7654;
-  background: #eaf6f0;
-  box-shadow:
-    0 0 0 1px rgba(11, 118, 84, 0.14),
-    inset 3px 0 0 #0b7654;
+  border-left: 2px solid var(--color-brand, #0b7654);
+  padding-left: 14px;
+  background: var(--color-brand-soft, #eff8f4);
+  box-shadow: none;
+}
+
+.opportunity-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.opportunity-card > svg {
+  flex: 0 0 auto;
+  color: var(--color-text-muted, #66736d);
 }
 
 .opportunity-card strong {
-  color: #15352b;
-  font-weight: 750;
+  color: var(--color-text, #17221d);
+  font-weight: 650;
 }
 
-.opportunity-card > span:first-child {
-  color: #62736b;
+.opportunity-copy > span:first-child {
+  color: var(--color-text-muted, #66736d);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .opportunity-card small {
@@ -966,11 +1064,9 @@ button:disabled {
 
 .empty {
   margin: 0;
-  padding: 14px 16px;
-  border: 1px solid #e1e9e5;
-  border-radius: 10px;
-  background: #f8fbf9;
-  color: #77877f;
+  padding: 16px 0;
+  border-top: 1px solid var(--color-border, #e2e7e4);
+  color: var(--color-text-muted, #66736d);
   line-height: 1.6;
 }
 
@@ -987,8 +1083,8 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 22px;
+  gap: var(--space-2, 16px);
+  margin-bottom: var(--space-3, 24px);
 }
 
 .detail-heading h2 {
@@ -998,20 +1094,20 @@ button:disabled {
 .status {
   display: inline-block;
   border-radius: 999px;
-  padding: 4px 9px;
-  background: #ddf3e8;
-  color: #08714f;
+  padding: 4px 8px;
+  background: var(--color-brand-soft, #eff8f4);
+  color: var(--color-brand, #0b7654);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 650;
 }
 
 .wallet-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 8px);
   max-width: 100%;
   overflow: hidden;
-  border-radius: 999px;
-  padding: 7px 10px;
-  background: #f1f5f3;
-  color: #52675e;
+  color: var(--color-text-muted, #66736d);
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1022,24 +1118,24 @@ button:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 32px;
   row-gap: 0;
-  margin: 0 0 24px;
+  margin: 0 0 var(--space-4, 32px);
 }
 
 .terms div {
   min-width: 0;
-  border-bottom: 1px solid #edf1ee;
-  padding: 11px 0;
+  border-bottom: 1px solid var(--color-border, #e2e7e4);
+  padding: 16px 0;
 }
 
 .terms dt {
-  color: #77877f;
+  color: var(--color-text-muted, #66736d);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .terms dd {
-  margin: 5px 0 0;
-  font-weight: 700;
+  margin: 4px 0 0;
+  font-weight: 600;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
@@ -1053,53 +1149,53 @@ button:disabled {
 .funding-steps,
 .recovery-card {
   display: grid;
-  gap: 14px;
+  gap: var(--space-3, 24px);
 }
 
 .balance-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 0;
+  border-top: 1px solid var(--color-border, #e2e7e4);
+  border-bottom: 1px solid var(--color-border, #e2e7e4);
 }
 
 .balance-grid div {
   display: grid;
-  gap: 6px;
-  min-height: 82px;
-  border: 1px solid #e3ebe7;
-  border-radius: 10px;
-  padding: 14px;
-  background: #f4f8f5;
+  gap: var(--space-1, 8px);
+  min-width: 0;
+  padding: 16px;
+  background: transparent;
+}
+
+.balance-grid div + div {
+  border-left: 1px solid var(--color-border, #e2e7e4);
 }
 
 .balance-grid span,
-.step-card > span {
-  color: #62736b;
+.step-label {
+  color: var(--color-text-muted, #66736d);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 650;
 }
 
 .balance-grid strong {
-  color: #15352b;
-  font-size: 17px;
-  font-weight: 750;
+  color: var(--color-text, #17221d);
+  font-size: 16px;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 
-.step-card,
 .journal-gate,
 .recovery-card,
 .completed-card {
   display: grid;
-  gap: 8px;
-  border: 1px solid #d9e3de;
-  border-radius: 12px;
-  padding: 18px;
+  gap: var(--space-1, 8px);
+  border-left: 3px solid var(--color-border-strong, #cbd5d0);
+  padding: 8px 0 8px 16px;
   line-height: 1.6;
 }
 
-.step-card h3,
-.step-card p,
 .journal-gate p,
 .recovery-card h3,
 .recovery-card p,
@@ -1108,102 +1204,188 @@ button:disabled {
   margin: 0;
 }
 
-.step-card.complete {
-  border-color: #91cdb5;
-  background: #effaf5;
-}
-
-.step-card.complete button:disabled {
-  cursor: default;
-  background: #d9eee4;
-  color: #0b6548;
-  opacity: 1;
-}
-
-.step-card.enabled {
-  border-color: #0b7654;
-  background: #fbfefc;
-  box-shadow: 0 0 0 1px rgba(11, 118, 84, 0.1);
-}
-
-.step-card button,
 .journal-gate button,
 .recovery-card button {
   width: fit-content;
-  margin-top: 4px;
+  margin-top: var(--space-1, 8px);
 }
 
-.step-card p,
 .journal-gate p,
 .recovery-card p {
-  color: #62736b;
+  color: var(--color-text-muted, #66736d);
 }
 
 .journal-gate {
-  background: #f4f8f5;
+  border-left-color: var(--color-brand, #0b7654);
 }
 
 .journal-gate.blocked {
-  border-color: #efb4b4;
-  background: #fff4f4;
+  border-left-color: #c24141;
 }
 
 .recovery-card {
-  border-color: #d5c27a;
-  background: #fffbea;
+  border-left-color: #b7791f;
 }
 
 .completed-card {
-  border-color: #91cdb5;
-  background: #effaf5;
+  border-left-color: var(--color-brand, #0b7654);
 }
 
 .completed-card p {
-  color: #315548;
+  color: var(--color-text-muted, #66736d);
+}
+
+.callout-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 8px);
+  color: var(--color-text, #17221d);
+}
+
+.callout-heading svg {
+  flex: 0 0 auto;
+  color: var(--color-brand, #0b7654);
 }
 
 .recipient-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1, 8px);
   margin: 0;
-  border: 1px solid #c7ddd2;
-  border-radius: 8px;
-  padding: 12px;
-  background: #eff7f3;
-  color: #315548;
+  border-left: 3px solid var(--color-brand, #0b7654);
+  padding: 8px 0 8px 16px;
+  color: var(--color-text-muted, #66736d);
   line-height: 1.55;
 }
 
 .insufficient {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1, 8px);
   margin: 0;
-  border: 1px solid #efc0c0;
-  border-radius: 8px;
-  padding: 12px;
-  background: #fff2f2;
+  border-left: 3px solid #c24141;
+  padding: 8px 0 8px 16px;
   color: #941f1f;
   line-height: 1.55;
+}
+
+.recipient-notice > svg,
+.insufficient > svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.workflow-timeline {
+  margin: var(--space-1, 8px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: var(--space-2, 16px);
+  padding-bottom: var(--space-4, 32px);
+}
+
+.workflow-step:last-child {
+  padding-bottom: 0;
+}
+
+.workflow-step:not(:last-child)::after {
+  position: absolute;
+  top: 32px;
+  bottom: 0;
+  left: 15px;
+  width: 1px;
+  background: var(--color-border, #e2e7e4);
+  content: '';
+}
+
+.workflow-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border-strong, #cbd5d0);
+  border-radius: 50%;
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text-muted, #66736d);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workflow-step.is-active .workflow-marker {
+  border-color: var(--color-brand, #0b7654);
+  color: var(--color-brand, #0b7654);
+}
+
+.workflow-step.is-complete .workflow-marker {
+  border-color: var(--color-brand, #0b7654);
+  background: var(--color-brand, #0b7654);
+  color: #ffffff;
+}
+
+.workflow-content {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.workflow-content h3,
+.workflow-content p {
+  margin: 0;
+}
+
+.workflow-content h3 {
+  margin-top: 4px;
+}
+
+.workflow-content p {
+  max-width: 720px;
+  margin-top: var(--space-1, 8px);
+  color: var(--color-text-muted, #66736d);
+  line-height: 1.6;
+}
+
+.workflow-content button {
+  margin-top: var(--space-2, 16px);
+}
+
+.workflow-step.is-complete .workflow-content button:disabled {
+  cursor: default;
+  border-color: var(--color-border, #e2e7e4);
+  background: var(--color-brand-soft, #eff8f4);
+  color: var(--color-brand, #0b7654);
+  opacity: 1;
 }
 
 .explorer-link {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1, 8px);
   min-height: 36px;
-  margin-top: 18px;
-  padding: 7px 11px;
-  border: 1px solid #0b7654;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #0b7654;
-  font-weight: 700;
+  margin-top: var(--space-3, 24px);
+  padding: 7px 12px;
+  border: 1px solid var(--color-border-strong, #cbd5d0);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface, #ffffff);
+  color: var(--color-brand, #0b7654);
+  font-size: 14px;
+  font-weight: 650;
   text-decoration: none;
   transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    color 0.16s ease;
+    border-color var(--transition-fast, 150ms ease),
+    background-color var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
 }
 
 .explorer-link:hover {
-  border-color: #075f44;
-  background: #eaf6ef;
-  color: #075f44;
+  border-color: var(--color-brand, #0b7654);
+  background: var(--color-brand-soft, #eff8f4);
+  color: var(--color-brand-hover, #075f44);
 }
 
 .explorer-link:focus-visible {
@@ -1220,9 +1402,19 @@ button:disabled {
   text-align: center;
 }
 
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 900px) {
   .repayment-page {
-    padding: 20px;
+    padding: 32px 24px 48px;
   }
 
   .page-header {
@@ -1238,19 +1430,23 @@ button:disabled {
     min-height: 0;
   }
 
+  .opportunity-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border, #e2e7e4);
+  }
+
   .detail-heading {
     align-items: flex-start;
   }
 
-  .terms,
-  .balance-grid {
+  .terms {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 560px) {
   .repayment-page {
-    padding: 20px 16px 32px;
+    padding: 24px 16px 40px;
   }
 
   h1 {
@@ -1267,17 +1463,32 @@ button:disabled {
 
   .opportunity-panel,
   .detail-panel {
-    padding: 18px;
+    padding: 24px 16px;
   }
 
   .wallet-label {
     width: 100%;
   }
 
-  .step-card button,
+  .balance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .balance-grid div + div {
+    border-top: 1px solid var(--color-border, #e2e7e4);
+    border-left: 0;
+  }
+
+  .workflow-content button,
   .journal-gate button,
   .recovery-card button {
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
   }
 }
 </style>

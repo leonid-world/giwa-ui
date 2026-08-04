@@ -1,6 +1,19 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import {
+  CheckCircle2,
+  ChevronRight,
+  CircleAlert,
+  FileText,
+  HandCoins,
+  Link2,
+  LogOut,
+  ReceiptText,
+  RefreshCw,
+  WalletCards,
+  X,
+} from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useWalletStore } from '../stores/wallet'
 
@@ -81,27 +94,43 @@ function logout() {
 
 <template>
   <main class="dashboard">
-    <section>
-      <p class="eyebrow">GIWA RECEIVABLE FINANCE</p>
-      <h1>로그인되었습니다.</h1>
-      <p class="description">회사 지갑을 MetaMask와 연결하세요. 개인 키는 저장되지 않습니다.</p>
-      <div class="wallet-card">
-        <span>현재 회사 지갑</span>
-        <strong v-if="isWalletLoading" class="loading-state" role="status">
-          회사 지갑 확인 중...
-        </strong>
-        <strong v-else-if="wallet.isConnected" class="wallet-address">
-          {{ wallet.walletAddress }}
-        </strong>
-        <strong v-else-if="walletLoadFailed">지갑 상태 확인 실패</strong>
-        <strong v-else>연결된 지갑 없음</strong>
+    <section class="dashboard-shell">
+      <header class="page-heading">
+        <h1>대시보드</h1>
+        <p class="description">회사 지갑을 MetaMask와 연결하고 매출채권 업무를 시작하세요.</p>
+      </header>
+
+      <section class="wallet-card" aria-labelledby="wallet-section-title">
+        <div class="section-heading">
+          <span class="section-icon" aria-hidden="true">
+            <WalletCards :size="20" />
+          </span>
+          <div>
+            <span>회사 지갑</span>
+            <h2 id="wallet-section-title">MetaMask 연결</h2>
+          </div>
+        </div>
+
+        <div class="wallet-summary">
+          <span>현재 연결 상태</span>
+          <strong v-if="isWalletLoading" class="loading-state" role="status">
+            회사 지갑 확인 중...
+          </strong>
+          <strong v-else-if="wallet.isConnected" class="wallet-address">
+            {{ wallet.walletAddress }}
+          </strong>
+          <strong v-else-if="walletLoadFailed">지갑 상태 확인 실패</strong>
+          <strong v-else>연결된 지갑 없음</strong>
+        </div>
 
         <button
+          class="primary-action"
           v-if="!wallet.hasPendingWallet"
           type="button"
           :disabled="isSelecting || isWalletLoading || walletLoadFailed"
           @click="selectWalletAccount"
         >
+          <WalletCards aria-hidden="true" :size="18" />
           {{
             isSelecting
               ? 'MetaMask 확인 중...'
@@ -120,6 +149,7 @@ function logout() {
           <p>이 주소를 회사 지갑으로 연결하시겠습니까?</p>
           <div class="confirmation-actions">
             <button type="button" :disabled="isConnecting" @click="confirmWalletConnection">
+              <Link2 aria-hidden="true" :size="18" />
               {{ isConnecting ? '연결 중...' : '이 지갑 연결' }}
             </button>
             <button
@@ -128,66 +158,110 @@ function logout() {
               :disabled="isSelecting"
               @click="selectWalletAccount"
             >
+              <RefreshCw aria-hidden="true" :size="18" />
               다른 계정 선택
             </button>
-            <button class="text-button" type="button" @click="cancelWalletSelection">취소</button>
+            <button class="text-button" type="button" @click="cancelWalletSelection">
+              <X aria-hidden="true" :size="18" />
+              취소
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div v-if="errorCode === 'WALLET_ALREADY_MAPPED'" class="conflict-alert" role="alert">
+        <CircleAlert class="alert-icon" aria-hidden="true" :size="20" />
+        <div>
+          <strong>이미 등록된 MetaMask 지갑입니다.</strong>
+          <p>{{ wallet.pendingWalletAddress }}</p>
+          <p>
+            이 주소는 다른 회사에서 사용 중입니다. 해당 회사용으로 분리된 MetaMask 계정을 선택해
+            주세요.
+          </p>
+          <div class="confirmation-actions">
+            <button type="button" :disabled="isSelecting" @click="selectWalletAccount">
+              <RefreshCw aria-hidden="true" :size="18" />
+              {{ isSelecting ? 'MetaMask 확인 중...' : '다른 계정 선택' }}
+            </button>
+            <button class="text-button danger" type="button" @click="cancelWalletSelection">
+              <X aria-hidden="true" :size="18" />
+              닫기
+            </button>
           </div>
         </div>
       </div>
-
-      <div v-if="errorCode === 'WALLET_ALREADY_MAPPED'" class="conflict-alert" role="alert">
-        <strong>이미 등록된 MetaMask 지갑입니다.</strong>
-        <p>{{ wallet.pendingWalletAddress }}</p>
-        <p>
-          이 주소는 다른 회사에서 사용 중입니다. 해당 회사용으로 분리된 MetaMask 계정을 선택해
-          주세요.
-        </p>
-        <div class="confirmation-actions">
-          <button type="button" :disabled="isSelecting" @click="selectWalletAccount">
-            {{ isSelecting ? 'MetaMask 확인 중...' : '다른 계정 선택' }}
-          </button>
-          <button class="text-button danger" type="button" @click="cancelWalletSelection">
-            닫기
+      <div v-else-if="errorMessage" class="error" role="alert">
+        <CircleAlert class="alert-icon" aria-hidden="true" :size="20" />
+        <div>
+          <span>{{ errorMessage }}</span>
+          <button
+            v-if="walletLoadFailed"
+            class="text-button"
+            type="button"
+            :disabled="isWalletLoading"
+            @click="loadWalletState"
+          >
+            <RefreshCw aria-hidden="true" :size="16" />
+            {{ isWalletLoading ? '조회 중...' : '지갑 상태 다시 조회' }}
           </button>
         </div>
       </div>
-      <div v-else-if="errorMessage" class="error" role="alert">
-        <span>{{ errorMessage }}</span>
-        <button
-          v-if="walletLoadFailed"
-          class="text-button"
-          type="button"
-          :disabled="isWalletLoading"
-          @click="loadWalletState"
-        >
-          {{ isWalletLoading ? '조회 중...' : '지갑 상태 다시 조회' }}
+      <p v-if="successMessage" class="success" role="status">
+        <CheckCircle2 aria-hidden="true" :size="20" />
+        <span>{{ successMessage }}</span>
+      </p>
+
+      <nav class="service-section" aria-label="주요 업무">
+        <div class="service-heading">
+          <h2>주요 업무</h2>
+          <p>진행할 매출채권 업무를 선택하세요.</p>
+        </div>
+        <div class="service-actions">
+          <button
+            type="button"
+            :disabled="!wallet.isConnected || isWalletLoading"
+            @click="router.push({ name: 'receivables' })"
+          >
+            <FileText class="service-icon" aria-hidden="true" :size="20" />
+            <span>
+              <strong>매출채권 관리</strong>
+              <small>채권을 등록하고 온체인 진행 상태를 확인합니다.</small>
+            </span>
+            <ChevronRight class="service-chevron" aria-hidden="true" :size="18" />
+          </button>
+          <button
+            type="button"
+            :disabled="!wallet.isConnected || isWalletLoading"
+            @click="router.push({ name: 'funding' })"
+          >
+            <HandCoins class="service-icon" aria-hidden="true" :size="20" />
+            <span>
+              <strong>토큰화 채권 펀딩</strong>
+              <small>펀딩 가능한 채권을 검토하고 자금을 공급합니다.</small>
+            </span>
+            <ChevronRight class="service-chevron" aria-hidden="true" :size="18" />
+          </button>
+          <button
+            type="button"
+            :disabled="!wallet.isConnected || isWalletLoading"
+            @click="router.push({ name: 'repayment' })"
+          >
+            <ReceiptText class="service-icon" aria-hidden="true" :size="20" />
+            <span>
+              <strong>매출채권 상환</strong>
+              <small>상환 대상과 현재 NFT 소유자를 확인합니다.</small>
+            </span>
+            <ChevronRight class="service-chevron" aria-hidden="true" :size="18" />
+          </button>
+        </div>
+      </nav>
+
+      <div class="page-actions">
+        <button class="logout-button" type="button" @click="logout">
+          <LogOut aria-hidden="true" :size="18" />
+          로그아웃
         </button>
       </div>
-      <p v-if="successMessage" class="success" role="status">{{ successMessage }}</p>
-      <div class="service-actions">
-        <button
-          type="button"
-          :disabled="!wallet.isConnected || isWalletLoading"
-          @click="router.push({ name: 'receivables' })"
-        >
-          매출채권 관리
-        </button>
-        <button
-          type="button"
-          :disabled="!wallet.isConnected || isWalletLoading"
-          @click="router.push({ name: 'funding' })"
-        >
-          토큰화 채권 펀딩
-        </button>
-        <button
-          type="button"
-          :disabled="!wallet.isConnected || isWalletLoading"
-          @click="router.push({ name: 'repayment' })"
-        >
-          매출채권 상환
-        </button>
-      </div>
-      <button class="logout-button" type="button" @click="logout">로그아웃</button>
     </section>
   </main>
 </template>
@@ -195,61 +269,83 @@ function logout() {
 <style scoped>
 .dashboard {
   min-height: 100%;
-  display: grid;
-  place-items: center;
-  padding: 48px 24px;
+  padding: var(--space-6) var(--space-3) var(--space-8);
 }
 
-section {
-  width: min(100%, 580px);
-  padding: 40px;
-  border: 1px solid #dce5e0;
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 18px 48px rgba(24, 62, 48, 0.08);
+.dashboard-shell {
+  width: min(100%, 880px);
+  margin: 0 auto;
 }
 
-.eyebrow {
-  margin: 0;
-  color: #0b7654;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
+.page-heading {
+  margin-bottom: var(--space-4);
 }
 
 h1 {
-  margin: 8px 0 6px;
-  color: #15352b;
-  font-size: 30px;
-  font-weight: 750;
+  margin: 0;
+  color: var(--color-text);
+  font-size: 32px;
+  font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.02em;
 }
 
 .description {
-  margin: 0;
-  color: #62736b;
-  line-height: 1.6;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 .wallet-card {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d7e9e1;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}
+
+.section-heading > div > span,
+.wallet-summary > span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+h2 {
+  margin: 2px 0 0;
+  color: var(--color-text);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.wallet-summary {
   display: grid;
-  gap: 8px;
-  margin-top: 24px;
-  padding: 20px;
-  border: 1px solid #dfe5e1;
-  border-radius: 13px;
-  background: #fbfdfc;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }
 
-.wallet-card span {
-  color: #62736b;
-  font-size: 14px;
-}
-
-.wallet-card strong {
+.wallet-summary strong {
   overflow-wrap: anywhere;
-  color: #15352b;
+  color: var(--color-text);
+  font-size: 14px;
 }
 
 .wallet-address {
@@ -259,23 +355,26 @@ h1 {
 }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
   min-height: 44px;
-  margin-top: 24px;
   border: 0;
-  border-radius: 9px;
-  padding: 11px 16px;
-  background: #0b7654;
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-brand);
   color: white;
   cursor: pointer;
-  font-weight: 700;
+  font-weight: 600;
   transition:
-    background-color 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease;
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 button:hover:not(:disabled) {
-  background: #075f44;
+  background: var(--color-brand-hover);
 }
 
 button:focus-visible {
@@ -283,60 +382,67 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-.wallet-card button {
-  margin-top: 8px;
+.primary-action {
+  margin-top: var(--space-2);
 }
 
 .wallet-confirmation {
   display: grid;
-  gap: 8px;
-  margin-top: 14px;
-  padding-top: 16px;
-  border-top: 1px solid #dfe5e1;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }
 
 .wallet-confirmation p {
   margin: 0;
-  color: #52675e;
+  color: var(--color-text-muted);
+}
+
+.wallet-confirmation > span {
+  color: var(--color-text-muted);
+  font-size: 13px;
 }
 
 .confirmation-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-1);
 }
 
 .confirmation-actions button {
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .secondary {
-  border: 1px solid #9eb2a8;
-  background: #ffffff;
-  color: #315548;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .secondary:hover:not(:disabled) {
-  border-color: #759889;
-  background: #f1f7f4;
+  border-color: #9ca9a3;
+  background: var(--color-surface-subtle);
 }
 
 .text-button {
   background: transparent;
-  color: #52675e;
+  color: var(--color-text-muted);
 }
 
 .text-button:hover:not(:disabled) {
-  background: #edf3f0;
-  color: #27463b;
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
 }
 
 .conflict-alert {
-  margin-top: 16px;
-  padding: 18px;
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2);
   border: 1px solid #efb4b4;
-  border-radius: 11px;
-  background: #fff4f4;
+  border-radius: var(--radius-md);
+  background: #fffafa;
 }
 
 .conflict-alert strong,
@@ -345,8 +451,13 @@ button:focus-visible {
 }
 
 .conflict-alert p {
-  margin: 8px 0 0;
+  margin: var(--space-1) 0 0;
   line-height: 1.55;
+}
+
+.alert-icon {
+  flex: 0 0 auto;
+  color: #a32323;
 }
 
 .danger {
@@ -359,20 +470,21 @@ button:disabled {
 }
 
 .error {
-  display: grid;
-  gap: 8px;
-  margin-top: 16px;
-  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2);
   border: 1px solid #efc0c0;
-  border-radius: 9px;
-  background: #fff5f5;
+  border-radius: var(--radius-md);
+  background: #fffafa;
   color: #a32323;
 }
 
 .error .text-button {
   justify-self: start;
   min-height: auto;
-  margin-top: 0;
+  margin-top: var(--space-1);
   padding: 0;
   color: #8f1717;
 }
@@ -384,63 +496,125 @@ button:disabled {
 }
 
 .success {
-  margin-top: 16px;
-  padding: 12px 14px;
-  border: 1px solid #afd8c7;
-  border-radius: 9px;
-  background: #eef9f4;
-  color: #086245;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid #b9ddce;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+}
+
+.service-section {
+  margin-top: var(--space-4);
+}
+
+.service-heading {
+  margin-bottom: var(--space-2);
+}
+
+.service-heading h2 {
+  margin: 0;
+}
+
+.service-heading p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
 }
 
 .service-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 
 .service-actions button {
-  flex: 1 1 180px;
-  margin-top: 0;
-  border: 1px solid #a9cdbd;
-  background: #edf7f2;
-  color: #0b6548;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  width: 100%;
+  min-height: 72px;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: left;
+}
+
+.service-actions button + button {
+  border-top: 1px solid var(--color-border);
 }
 
 .service-actions button:hover:not(:disabled) {
-  border-color: #78ad96;
-  background: #e2f2ea;
+  background: var(--color-surface-subtle);
+}
+
+.service-actions button > span {
+  display: grid;
+  gap: 2px;
+}
+
+.service-actions strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.service-actions small {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.service-icon {
+  color: var(--color-brand);
+}
+
+.service-chevron {
+  color: #98a39e;
+}
+
+.page-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-3);
 }
 
 .logout-button {
-  width: 100%;
-  margin-top: 12px;
-  border: 1px solid #d1dcd6;
-  background: #ffffff;
-  color: #62736b;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
 }
 
 .logout-button:hover:not(:disabled) {
-  border-color: #aebfb7;
-  background: #f4f7f5;
-  color: #315548;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 @media (max-width: 600px) {
   .dashboard {
-    padding: 32px 16px;
-  }
-
-  section {
-    padding: 30px 22px;
+    padding: var(--space-4) var(--space-2) var(--space-6);
   }
 
   .confirmation-actions {
     display: grid;
   }
 
-  .service-actions {
-    display: grid;
+  .confirmation-actions button {
+    width: 100%;
+  }
+
+  .service-actions button {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-height: 80px;
+  }
+
+  .service-actions small {
+    line-height: 1.4;
   }
 }
 </style>
