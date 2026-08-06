@@ -11,9 +11,17 @@ export const useReceivableStore = defineStore('receivable', () => {
     receivables.value = await apiRequest('/receivables')
   }
 
-  async function loadOne(receivableId) {
-    selectedReceivable.value = await apiRequest(`/receivables/${receivableId}`)
+  async function fetchOne(receivableId) {
+    return apiRequest(`/receivables/${receivableId}`)
+  }
+
+  function selectOne(receivable) {
+    selectedReceivable.value = receivable
     return selectedReceivable.value
+  }
+
+  async function loadOne(receivableId) {
+    return selectOne(await fetchOne(receivableId))
   }
 
   async function loadFundingOpportunities() {
@@ -85,6 +93,8 @@ export const useReceivableStore = defineStore('receivable', () => {
     fundingOpportunities,
     selectedReceivable,
     loadAll,
+    fetchOne,
+    selectOne,
     loadOne,
     loadFundingOpportunities,
     clearSelection,

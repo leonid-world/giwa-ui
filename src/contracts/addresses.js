@@ -6,6 +6,8 @@ export const giwaContractConfig = Object.freeze({
   receivableFinanceAddress:
     import.meta.env.VITE_RECEIVABLE_FINANCE_ADDRESS?.trim() ?? '',
   mockKrwAddress: import.meta.env.VITE_MOCK_KRW_ADDRESS?.trim() ?? '',
+  mockKrwFaucetAddress:
+    import.meta.env.VITE_MOCK_KRW_FAUCET_ADDRESS?.trim() ?? '',
 })
 
 export function transactionExplorerUrl(txHash) {
