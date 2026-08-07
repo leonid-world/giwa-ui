@@ -16,13 +16,9 @@ import {
 } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useMockKrwFaucetClaim } from '../composables/useMockKrwFaucetClaim'
 import { transactionExplorerUrl } from '../contracts/addresses'
 import { getReceivableBlockchainTransactions } from '../services/blockchainTransactions'
-import {
-  claimDemoMkrw,
-  getMockKrwFaucetReadiness,
-  inspectMockKrwFaucetClaim,
-} from '../services/web3/mockKrwFaucet'
 import {
   approveFundingAmount,
   fundReceivableOnchain,
@@ -34,20 +30,26 @@ import { useReceivableStore } from '../stores/receivable'
 import { useWalletStore } from '../stores/wallet'
 
 const PENDING_SYNC_STORAGE_KEY = 'receivablePendingBlockchainSync'
-const PENDING_FAUCET_CLAIM_STORAGE_KEY = 'mockKrwFaucetPendingClaim'
 const FUND_TRANSACTION_TYPE = 'FUND_RECEIVABLE'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const receivableStore = useReceivableStore()
 const walletStore = useWalletStore()
+const {
+  canClaimDemoMkrw: faucetCanClaimDemoMkrw,
+  faucetClaimUncertain,
+  faucetErrorMessage,
+  faucetReadiness,
+  faucetTxHash,
+  isFaucetLoading,
+  prepareFaucetClaim,
+  resetFaucetReadiness,
+  submitFaucetClaim,
+} = useMockKrwFaucetClaim()
 
 const pendingSync = ref(null)
 const readiness = ref(null)
-const faucetReadiness = ref(null)
-const faucetErrorMessage = ref('')
-const faucetClaimUncertain = ref(false)
-const faucetPendingClaim = ref(null)
 const journalGate = ref('idle')
 const journalMessage = ref('')
 const errorMessage = ref('')
@@ -57,8 +59,6 @@ const lastTxHash = ref('')
 const isLoading = ref(true)
 const hasLoadedOpportunities = ref(false)
 const isActionRunning = ref(false)
-const isFaucetLoading = ref(false)
-let faucetReadinessRequestId = 0
 let selectionRequestId = 0
 
 const opportunities = computed(() => receivableStore.fundingOpportunities)
@@ -92,8 +92,7 @@ const canClaimDemoMkrw = computed(
     journalGate.value === 'clear' &&
     readiness.value &&
     !readiness.value.hasSufficientBalance &&
-    faucetReadiness.value?.canClaim &&
-    !faucetClaimUncertain.value &&
+    faucetCanClaimDemoMkrw.value &&
     !isActionRunning.value &&
     !isFaucetLoading.value,
 )
@@ -130,8 +129,6 @@ async function loadPage() {
     ])
     hasLoadedOpportunities.value = true
     pendingSync.value = readPendingSynchronization(currentCompanyId.value)
-    faucetPendingClaim.value = readPendingFaucetClaim(walletStore.walletAddress)
-    faucetClaimUncertain.value = Boolean(faucetPendingClaim.value)
 
     if (pendingSync.value?.type === 'funded') {
       await loadPendingReceivable()
@@ -204,6 +201,7 @@ async function selectOpportunity(receivableId) {
 
 async function refreshPage() {
   const receivableId = selectedReceivable.value?.receivableId
+  selectionRequestId += 1
   clearMessages({ keepTransaction: Boolean(pendingSync.value) })
   isLoading.value = true
   try {
@@ -256,105 +254,17 @@ async function refreshReadiness(
     readiness.value = result
     journalGate.value = 'clear'
     journalMessage.value = '새 펀딩을 시작해도 되는 상태임을 확인했습니다.'
-    const pendingClaimStatus = await reconcilePendingFaucetClaim(
+    await prepareFaucetClaim(
+      walletStore.walletAddress,
       result.fundingAmount,
-      requestId,
-      receivableId,
+      result.hasSufficientBalance,
+      { isCurrent: () => isCurrentSelection(requestId, receivableId) },
     )
-    if (!isCurrentSelection(requestId, receivableId)) return
-    if (!result.hasSufficientBalance) {
-      await refreshFaucetReadiness(result.fundingAmount, requestId, receivableId)
-    } else if (
-      pendingClaimStatus === 'CONFIRMED' ||
-      pendingClaimStatus === 'CLAIMED'
-    ) {
-      clearPendingFaucetClaim()
+    if (isCurrentSelection(requestId, receivableId) && faucetTxHash.value) {
+      lastTxHash.value = faucetTxHash.value
     }
   } finally {
     if (isCurrentSelection(requestId, receivableId)) actionStage.value = ''
-  }
-}
-
-async function refreshFaucetReadiness(
-  requiredAmount,
-  selectionId = selectionRequestId,
-  receivableId = selectedReceivable.value?.receivableId,
-) {
-  const requestId = ++faucetReadinessRequestId
-  faucetReadiness.value = null
-  faucetErrorMessage.value = ''
-  isFaucetLoading.value = true
-  try {
-    const result = await getMockKrwFaucetReadiness(
-      walletStore.walletAddress,
-      requiredAmount,
-    )
-    if (
-      requestId !== faucetReadinessRequestId ||
-      !isCurrentSelection(selectionId, receivableId)
-    ) {
-      return
-    }
-    faucetReadiness.value = result
-    if (result.hasClaimed) {
-      clearPendingFaucetClaim()
-    }
-  } catch (error) {
-    if (
-      requestId !== faucetReadinessRequestId ||
-      !isCurrentSelection(selectionId, receivableId)
-    ) {
-      return
-    }
-    faucetErrorMessage.value =
-      error.message ?? '데모 mKRW 충전 가능 여부를 확인하지 못했습니다.'
-  } finally {
-    if (
-      requestId === faucetReadinessRequestId &&
-      isCurrentSelection(selectionId, receivableId)
-    ) {
-      isFaucetLoading.value = false
-    }
-  }
-}
-
-async function reconcilePendingFaucetClaim(
-  requiredAmount,
-  requestId,
-  receivableId,
-) {
-  if (!isCurrentSelection(requestId, receivableId)) return 'STALE'
-  const pendingClaim = readPendingFaucetClaim(walletStore.walletAddress)
-  faucetPendingClaim.value = pendingClaim
-  faucetClaimUncertain.value = Boolean(pendingClaim)
-  if (!pendingClaim) return null
-
-  lastTxHash.value = pendingClaim.txHash
-  try {
-    const result = await inspectMockKrwFaucetClaim(
-      pendingClaim.txHash,
-      walletStore.walletAddress,
-      requiredAmount,
-      pendingClaim.nonce,
-    )
-    if (!isCurrentSelection(requestId, receivableId)) return 'STALE'
-    if (result.status === 'FAILED') {
-      clearPendingFaucetClaim()
-      return result.status
-    }
-    if (result.status === 'CONFIRMED' || result.status === 'CLAIMED') {
-      savePendingFaucetClaim({
-        ...pendingClaim,
-        phase: 'confirmed',
-        claimAmount: result.claimAmount ?? pendingClaim.claimAmount,
-      })
-    }
-    return result.status
-  } catch (error) {
-    if (!isCurrentSelection(requestId, receivableId)) return 'STALE'
-    faucetErrorMessage.value =
-      error.message ?? '기존 데모 mKRW 충전 트랜잭션을 확인하지 못했습니다.'
-    return 'PENDING'
   }
 }
 
@@ -381,24 +291,10 @@ async function receiveDemoMkrw() {
   actionStage.value =
     'MetaMask에서 데모 mKRW 수령을 확인해 주세요. 블록 확인 전에는 요청을 반복하지 마세요...'
   try {
-    const result = await claimDemoMkrw(
-      walletStore.walletAddress,
-      receivable.fundingAmount,
-      (submitted) => {
-        const persisted = savePendingFaucetClaim({
-          ...submitted,
-          phase: 'submitted',
-          submittedAt: new Date().toISOString(),
-        })
-        if (!persisted) throw new Error('Could not persist Faucet claim recovery')
+    const result = await submitFaucetClaim(walletStore.walletAddress, receivable.fundingAmount, {
+      onSubmitted: (submitted) => {
         lastTxHash.value = submitted.txHash
       },
-    )
-    savePendingFaucetClaim({
-      ...faucetPendingClaim.value,
-      txHash: result.txHash,
-      phase: 'confirmed',
-      claimAmount: result.claimAmount,
     })
     lastTxHash.value = result.txHash
     successMessage.value = `데모 ${formatMkrw(result.claimAmount)} 충전 트랜잭션이 확인되었습니다.`
@@ -413,37 +309,6 @@ async function receiveDemoMkrw() {
     }
   } catch (error) {
     lastTxHash.value = error.txHash ?? lastTxHash.value
-    if (error.txHash) {
-      savePendingFaucetClaim({
-        ...faucetPendingClaim.value,
-        txHash: error.txHash,
-        funderWalletAddress: walletStore.walletAddress,
-        phase: 'submitted',
-        submittedAt: faucetPendingClaim.value?.submittedAt ?? new Date().toISOString(),
-      })
-    }
-    if (
-      error.code === 'FAUCET_CLAIM_FAILED' ||
-      error.code === 'TRANSACTION_CANCELLED'
-    ) {
-      clearPendingFaucetClaim()
-    }
-    if (
-      error.code === 'FAUCET_ALREADY_CLAIMED' ||
-      error.code === 'FAUCET_DEPLETED'
-    ) {
-      faucetReadiness.value = {
-        ...faucetReadiness.value,
-        hasClaimed:
-          error.code === 'FAUCET_ALREADY_CLAIMED' ||
-          faucetReadiness.value?.hasClaimed,
-        hasInventory:
-          error.code === 'FAUCET_DEPLETED'
-            ? false
-            : faucetReadiness.value?.hasInventory,
-        canClaim: false,
-      }
-    }
     errorMessage.value = error.message ?? '데모 mKRW 충전을 완료하지 못했습니다.'
   } finally {
     actionStage.value = ''
@@ -769,76 +634,6 @@ function clearMessages({ keepTransaction = false } = {}) {
   if (!keepTransaction) lastTxHash.value = ''
 }
 
-function resetFaucetReadiness() {
-  faucetReadinessRequestId += 1
-  faucetReadiness.value = null
-  faucetErrorMessage.value = ''
-  isFaucetLoading.value = false
-}
-
-function readPendingFaucetClaim(walletAddress) {
-  if (!walletAddress) return null
-  try {
-    const claims = JSON.parse(
-      localStorage.getItem(PENDING_FAUCET_CLAIM_STORAGE_KEY) ?? '{}',
-    )
-    const claim = claims[String(walletAddress).toLowerCase()]
-    if (!claim || !/^0x[0-9a-fA-F]{64}$/.test(claim.txHash ?? '')) return null
-    return claim
-  } catch {
-    localStorage.removeItem(PENDING_FAUCET_CLAIM_STORAGE_KEY)
-    return null
-  }
-}
-
-function savePendingFaucetClaim(claim) {
-  const walletAddress = claim?.funderWalletAddress ?? walletStore.walletAddress
-  if (!walletAddress || !/^0x[0-9a-fA-F]{64}$/.test(claim?.txHash ?? '')) {
-    return false
-  }
-
-  let claims
-  try {
-    claims = JSON.parse(
-      localStorage.getItem(PENDING_FAUCET_CLAIM_STORAGE_KEY) ?? '{}',
-    )
-  } catch {
-    claims = {}
-  }
-  const saved = { ...claim, funderWalletAddress: walletAddress }
-  claims[String(walletAddress).toLowerCase()] = saved
-  faucetPendingClaim.value = saved
-  faucetClaimUncertain.value = true
-  try {
-    localStorage.setItem(PENDING_FAUCET_CLAIM_STORAGE_KEY, JSON.stringify(claims))
-    return true
-  } catch {
-    return false
-  }
-}
-
-function clearPendingFaucetClaim() {
-  const walletAddress =
-    faucetPendingClaim.value?.funderWalletAddress ?? walletStore.walletAddress
-  if (walletAddress) {
-    try {
-      const claims = JSON.parse(
-        localStorage.getItem(PENDING_FAUCET_CLAIM_STORAGE_KEY) ?? '{}',
-      )
-      delete claims[String(walletAddress).toLowerCase()]
-      if (Object.keys(claims).length) {
-        localStorage.setItem(PENDING_FAUCET_CLAIM_STORAGE_KEY, JSON.stringify(claims))
-      } else {
-        localStorage.removeItem(PENDING_FAUCET_CLAIM_STORAGE_KEY)
-      }
-    } catch {
-      localStorage.removeItem(PENDING_FAUCET_CLAIM_STORAGE_KEY)
-    }
-  }
-  faucetPendingClaim.value = null
-  faucetClaimUncertain.value = false
-}
-
 function sameId(first, second) {
   return first != null && second != null && String(first) === String(second)
 }
@@ -906,7 +701,7 @@ function shortAddress(value) {
           <Files :size="16" :stroke-width="1.8" aria-hidden="true" />
           매출채권 관리
         </button>
-        <button type="button" :disabled="isLoading" @click="refreshPage">
+        <button type="button" :disabled="isLoading || isActionRunning" @click="refreshPage">
           <RefreshCw
             :size="16"
             :stroke-width="1.8"
@@ -956,6 +751,7 @@ function shortAddress(value) {
             selected: sameId(receivable.receivableId, selectedReceivable?.receivableId),
           }"
           :aria-pressed="sameId(receivable.receivableId, selectedReceivable?.receivableId)"
+          :disabled="isActionRunning || Boolean(pendingSync)"
           @click="selectOpportunity(receivable.receivableId)"
         >
           <span class="opportunity-meta">

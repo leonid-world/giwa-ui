@@ -3,6 +3,7 @@ import {
   Check,
   ChevronRight,
   CircleCheckBig,
+  Coins,
   ExternalLink,
   FileText,
   LayoutDashboard,
@@ -16,6 +17,7 @@ import {
 } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useMockKrwFaucetClaim } from '../composables/useMockKrwFaucetClaim'
 import { transactionExplorerUrl } from '../contracts/addresses'
 import { getReceivableBlockchainTransactions } from '../services/blockchainTransactions'
 import {
@@ -35,6 +37,17 @@ const router = useRouter()
 const authStore = useAuthStore()
 const receivableStore = useReceivableStore()
 const walletStore = useWalletStore()
+const {
+  canClaimDemoMkrw: faucetCanClaimDemoMkrw,
+  faucetClaimUncertain,
+  faucetErrorMessage,
+  faucetReadiness,
+  faucetTxHash,
+  isFaucetLoading,
+  prepareFaucetClaim,
+  resetFaucetReadiness,
+  submitFaucetClaim,
+} = useMockKrwFaucetClaim()
 
 const pendingSync = ref(null)
 const readiness = ref(null)
@@ -47,6 +60,7 @@ const lastTxHash = ref('')
 const isLoading = ref(true)
 const hasLoadedObligations = ref(false)
 const isActionRunning = ref(false)
+let selectionRequestId = 0
 
 const currentCompanyId = computed(() => authStore.user?.companyId)
 const repaymentObligations = computed(() =>
@@ -78,6 +92,16 @@ const canRepay = computed(
     readiness.value?.hasSufficientAllowance &&
     !isActionRunning.value,
 )
+const canClaimDemoMkrw = computed(
+  () =>
+    !pendingSync.value &&
+    journalGate.value === 'clear' &&
+    readiness.value &&
+    !readiness.value.hasSufficientBalance &&
+    faucetCanClaimDemoMkrw.value &&
+    !isActionRunning.value &&
+    !isFaucetLoading.value,
+)
 const retryButtonLabel = computed(() => {
   if (pendingSync.value?.phase === 'submitted') {
     return '기존 상환 트랜잭션 확인'
@@ -92,6 +116,7 @@ async function loadPage() {
   isLoading.value = true
   hasLoadedObligations.value = false
   readiness.value = null
+  resetFaucetReadiness()
   receivableStore.clearSelection()
   try {
     await Promise.all([authStore.loadUser(), walletStore.loadWallet(), receivableStore.loadAll()])
@@ -146,15 +171,22 @@ async function loadPendingReceivable() {
 }
 
 async function selectObligation(receivableId) {
+  const requestId = ++selectionRequestId
   clearMessages()
   readiness.value = null
+  resetFaucetReadiness()
   journalGate.value = 'checking'
   journalMessage.value = '기존 상환 트랜잭션 이력을 확인하고 있습니다.'
   try {
-    await receivableStore.loadOne(receivableId)
-    const adopted = await inspectRepaymentJournal()
-    if (!adopted) await refreshReadiness()
+    const receivable = await receivableStore.fetchOne(receivableId)
+    if (requestId !== selectionRequestId) return
+    receivableStore.selectOne(receivable)
+    const adopted = await inspectRepaymentJournal(requestId, receivableId)
+    if (!adopted && isCurrentSelection(requestId, receivableId)) {
+      await refreshReadiness(requestId, receivableId)
+    }
   } catch (error) {
+    if (requestId !== selectionRequestId) return
     journalGate.value = 'error'
     errorMessage.value = error.message ?? '상환 대상 채권을 불러오지 못했습니다.'
   }
@@ -162,6 +194,7 @@ async function selectObligation(receivableId) {
 
 async function refreshPage() {
   const receivableId = selectedReceivable.value?.receivableId
+  selectionRequestId += 1
   clearMessages({ keepTransaction: Boolean(pendingSync.value) })
   isLoading.value = true
   try {
@@ -180,6 +213,7 @@ async function refreshPage() {
     } else {
       receivableStore.clearSelection()
       readiness.value = null
+      resetFaucetReadiness()
       journalGate.value = 'clear'
     }
   } catch (error) {
@@ -189,21 +223,93 @@ async function refreshPage() {
   }
 }
 
-async function refreshReadiness() {
+async function refreshReadiness(
+  requestId = selectionRequestId,
+  receivableId = selectedReceivable.value?.receivableId,
+) {
   const receivable = selectedReceivable.value
-  if (!receivable || pendingSync.value) return
+  if (!isCurrentSelection(requestId, receivableId)) return
+  if (!receivable || pendingSync.value) {
+    resetFaucetReadiness()
+    return
+  }
   if (!walletStore.walletAddress) {
     readiness.value = null
+    resetFaucetReadiness()
     throw new Error('Dashboard에서 Buyer 회사 지갑을 먼저 연결해 주세요.')
   }
 
+  resetFaucetReadiness()
   actionStage.value = 'GIWA 채권, NFT 소유자, mKRW 잔액과 승인 상태를 확인하고 있습니다...'
   try {
-    readiness.value = await getRepaymentReadiness(receivable, walletStore.walletAddress)
+    const result = await getRepaymentReadiness(receivable, walletStore.walletAddress)
+    if (!isCurrentSelection(requestId, receivableId)) return
+    readiness.value = result
     journalGate.value = 'clear'
     journalMessage.value = '새 상환을 시작해도 되는 상태임을 확인했습니다.'
+    await prepareFaucetClaim(
+      walletStore.walletAddress,
+      result.faceValue,
+      result.hasSufficientBalance,
+      { isCurrent: () => isCurrentSelection(requestId, receivableId) },
+    )
+    if (isCurrentSelection(requestId, receivableId) && faucetTxHash.value) {
+      lastTxHash.value = faucetTxHash.value
+    }
   } finally {
-    actionStage.value = ''
+    if (isCurrentSelection(requestId, receivableId)) actionStage.value = ''
+  }
+}
+
+async function refreshSelectedReadiness() {
+  if (!selectedReceivable.value || isActionRunning.value) return
+
+  clearMessages({ keepTransaction: true })
+  isActionRunning.value = true
+  try {
+    await refreshReadiness()
+  } catch (error) {
+    errorMessage.value = error.message ?? '최신 mKRW 상태를 확인하지 못했습니다.'
+  } finally {
+    isActionRunning.value = false
+  }
+}
+
+async function receiveDemoMkrw() {
+  const receivable = selectedReceivable.value
+  const requestId = selectionRequestId
+  if (!receivable || !canClaimDemoMkrw.value) return
+
+  clearMessages()
+  isActionRunning.value = true
+  actionStage.value =
+    'MetaMask에서 데모 mKRW 수령을 확인해 주세요. 블록 확인 전에는 요청을 반복하지 마세요...'
+  try {
+    const result = await submitFaucetClaim(walletStore.walletAddress, receivable.faceValue, {
+      onSubmitted: (submitted) => {
+        lastTxHash.value = submitted.txHash
+      },
+    })
+    lastTxHash.value = result.txHash
+    successMessage.value = `데모 ${formatMkrw(result.claimAmount)} 충전 트랜잭션이 확인되었습니다.`
+
+    try {
+      await refreshReadiness(requestId, receivable.receivableId)
+      if (!isCurrentSelection(requestId, receivable.receivableId)) return
+      successMessage.value = readiness.value?.hasSufficientBalance
+        ? `데모 ${formatMkrw(result.claimAmount)} 충전이 완료되었습니다. 이제 1단계 사용 승인을 진행해 주세요.`
+        : `데모 ${formatMkrw(result.claimAmount)} 충전은 완료되었지만 선택한 채권의 상환 필요 금액보다 잔액이 적습니다.`
+    } catch (refreshError) {
+      if (!isCurrentSelection(requestId, receivable.receivableId)) return
+      errorMessage.value = `충전 트랜잭션은 성공했습니다. 다시 전송하지 말고 최신 상태를 조회해 주세요. (${refreshError.message})`
+    }
+  } catch (error) {
+    if (!isCurrentSelection(requestId, receivable.receivableId)) return
+    lastTxHash.value = error.txHash ?? lastTxHash.value
+    errorMessage.value = error.message ?? '데모 mKRW 충전을 완료하지 못했습니다.'
+  } finally {
+    if (isCurrentSelection(requestId, receivable.receivableId)) actionStage.value = ''
+    isActionRunning.value = false
   }
 }
 
@@ -232,12 +338,16 @@ async function approveMkrw() {
 
 async function startRepayment() {
   const requestedReceivable = selectedReceivable.value
+  const requestId = selectionRequestId
   if (!requestedReceivable || !canRepay.value) return
 
   clearMessages()
   isActionRunning.value = true
   try {
-    const adopted = await inspectRepaymentJournal()
+    const adopted = await inspectRepaymentJournal(
+      requestId,
+      requestedReceivable.receivableId,
+    )
     if (
       adopted ||
       pendingSync.value ||
@@ -245,10 +355,11 @@ async function startRepayment() {
     ) {
       return
     }
-    await refreshReadiness()
+    await refreshReadiness(requestId, requestedReceivable.receivableId)
     if (
       pendingSync.value ||
       journalGate.value !== 'clear' ||
+      !isCurrentSelection(requestId, requestedReceivable.receivableId) ||
       !readiness.value?.hasSufficientBalance ||
       !readiness.value?.hasSufficientAllowance
     ) {
@@ -294,9 +405,16 @@ async function startRepayment() {
   }
 }
 
-async function inspectRepaymentJournal() {
+async function inspectRepaymentJournal(
+  requestId = selectionRequestId,
+  receivableId = selectedReceivable.value?.receivableId,
+) {
   const receivable = selectedReceivable.value
-  if (!receivable || pendingSync.value) {
+  if (
+    !receivable ||
+    pendingSync.value ||
+    !isCurrentSelection(requestId, receivableId)
+  ) {
     return Boolean(pendingSync.value)
   }
 
@@ -305,6 +423,7 @@ async function inspectRepaymentJournal() {
     '서버의 기존 상환 이력을 확인하고 있습니다. 확인 전에는 새 상환을 시작할 수 없습니다.'
   try {
     const transactions = await getReceivableBlockchainTransactions(receivable.receivableId)
+    if (!isCurrentSelection(requestId, receivableId)) return true
     const repaymentTransactions = transactions.filter(
       (transaction) => transaction?.transactionType === REPAY_TRANSACTION_TYPE,
     )
@@ -356,6 +475,7 @@ async function inspectRepaymentJournal() {
         : '이미 진행 중인 상환을 찾았습니다. 새 트랜잭션을 보내지 말고 기존 블록 확인을 이어가 주세요.'
     return true
   } catch (error) {
+    if (!isCurrentSelection(requestId, receivableId)) return true
     journalGate.value = 'error'
     journalMessage.value = `기존 상환 이력을 확인하지 못해 새 트랜잭션을 차단했습니다. (${error.message})`
     return true
@@ -430,6 +550,7 @@ async function synchronizePending() {
     clearPendingSynchronization()
     journalGate.value = 'clear'
     readiness.value = null
+    resetFaucetReadiness()
     lastTxHash.value = repaid.repayTxHash
     successMessage.value =
       '채권 상환이 완료되었습니다. 현재 NFT 소유자에게 채권 금액만큼 mKRW가 지급되었습니다.'
@@ -523,6 +644,13 @@ function sameId(first, second) {
   return first != null && second != null && String(first) === String(second)
 }
 
+function isCurrentSelection(requestId, receivableId) {
+  return (
+    requestId === selectionRequestId &&
+    sameId(selectedReceivable.value?.receivableId, receivableId)
+  )
+}
+
 function sameHex(first, second) {
   return (
     typeof first === 'string' &&
@@ -538,6 +666,19 @@ function formatAmount(value) {
   } catch {
     return `${value} KRW`
   }
+}
+
+function formatNumber(value) {
+  if (value == null || value === '') return '-'
+  try {
+    return BigInt(value).toLocaleString('ko-KR')
+  } catch {
+    return String(value)
+  }
+}
+
+function formatMkrw(value) {
+  return `${formatNumber(value)} mKRW`
 }
 
 function shortAddress(value) {
@@ -563,7 +704,7 @@ function shortAddress(value) {
           <FileText :size="16" aria-hidden="true" />
           매출채권 관리
         </button>
-        <button type="button" :disabled="isLoading" @click="refreshPage">
+        <button type="button" :disabled="isLoading || isActionRunning" @click="refreshPage">
           <LoaderCircle v-if="isLoading" :size="16" class="spin" aria-hidden="true" />
           <RefreshCw v-else :size="16" aria-hidden="true" />
           {{ isLoading ? '조회 중...' : '최신 상태 조회' }}
@@ -606,6 +747,7 @@ function shortAddress(value) {
             selected: sameId(receivable.receivableId, selectedReceivable?.receivableId),
           }"
           :aria-pressed="sameId(receivable.receivableId, selectedReceivable?.receivableId)"
+          :disabled="isActionRunning || Boolean(pendingSync)"
           @click="selectObligation(receivable.receivableId)"
         >
           <span class="opportunity-copy">
@@ -742,13 +884,137 @@ function shortAddress(value) {
               </span>
             </p>
 
-            <p v-if="!readiness.hasSufficientBalance" class="insufficient" role="alert">
-              <TriangleAlert :size="16" aria-hidden="true" />
-              <span>
-                mKRW 잔액이 부족합니다. MockKRW 배포자(owner)가 현재 Buyer 지갑에 최소 필요 금액을
-                mint한 뒤 최신 상태를 조회해 주세요.
-              </span>
-            </p>
+            <section
+              v-if="!readiness.hasSufficientBalance"
+              class="faucet-card"
+              aria-labelledby="repayment-faucet-title"
+            >
+              <div class="faucet-heading">
+                <div class="callout-heading">
+                  <Coins :size="18" aria-hidden="true" />
+                  <h3 id="repayment-faucet-title">데모 mKRW 충전</h3>
+                </div>
+                <span class="demo-badge">테스트넷 전용</span>
+              </div>
+              <p class="faucet-intro">
+                상환에 필요한 mKRW가 부족합니다. 등록된 Buyer 지갑의 수령 가능 여부를 확인해
+                사전 예치된 데모 토큰을 지급합니다. 새로운 mKRW를 발행하는 작업은 아닙니다.
+              </p>
+
+              <p v-if="isFaucetLoading" class="faucet-status" role="status">
+                <LoaderCircle :size="17" class="spin" aria-hidden="true" />
+                데모 mKRW 충전 가능 여부를 확인하고 있습니다...
+              </p>
+
+              <template v-else-if="faucetErrorMessage">
+                <div class="faucet-status error" role="alert">
+                  <TriangleAlert :size="17" aria-hidden="true" />
+                  <span>{{ faucetErrorMessage }}</span>
+                </div>
+                <div class="faucet-actions">
+                  <button
+                    type="button"
+                    class="secondary"
+                    :disabled="isActionRunning || isFaucetLoading"
+                    @click="refreshSelectedReadiness"
+                  >
+                    <RefreshCw :size="16" aria-hidden="true" />
+                    충전 상태 다시 조회
+                  </button>
+                </div>
+              </template>
+
+              <template v-else-if="faucetReadiness">
+                <div class="faucet-stats">
+                  <div>
+                    <span>지갑당 1회 지급</span>
+                    <strong>{{ formatMkrw(faucetReadiness.claimAmount) }}</strong>
+                  </div>
+                  <div>
+                    <span>현재 Faucet 재고</span>
+                    <strong>{{ formatMkrw(faucetReadiness.faucetBalance) }}</strong>
+                  </div>
+                </div>
+
+                <p v-if="faucetClaimUncertain" class="faucet-status warning" role="alert">
+                  <TriangleAlert :size="17" aria-hidden="true" />
+                  제출된 충전 트랜잭션을 확인하거나 최신 잔액에 반영하고 있습니다. 요청을 다시
+                  보내지 말고 Explorer와 최신 상태를 확인해 주세요.
+                </p>
+                <p
+                  v-else-if="faucetReadiness.hasClaimed"
+                  class="faucet-status warning"
+                  role="status"
+                >
+                  <Check :size="17" aria-hidden="true" />
+                  이 Buyer 지갑은 데모 mKRW 충전을 이미 한 번 사용했습니다. 현재 잔액으로 상환
+                  가능한 채권을 선택해 주세요.
+                </p>
+                <p
+                  v-else-if="!faucetReadiness.hasInventory"
+                  class="faucet-status error"
+                  role="alert"
+                >
+                  <TriangleAlert :size="17" aria-hidden="true" />
+                  데모 mKRW 충전 재고가 소진되었습니다. 현재 자동 충전을 이용할 수 없습니다.
+                </p>
+                <p
+                  v-else-if="!faucetReadiness.willCoverRequiredAmount"
+                  class="faucet-status warning"
+                  role="alert"
+                >
+                  <TriangleAlert :size="17" aria-hidden="true" />
+                  한 번 충전해도 선택한 채권의 상환 금액에 미치지 않아 수령을 차단했습니다.
+                </p>
+                <p
+                  v-else-if="!faucetReadiness.hasNativeGas"
+                  class="faucet-status warning"
+                  role="alert"
+                >
+                  <TriangleAlert :size="17" aria-hidden="true" />
+                  수령 트랜잭션에 필요한 GIWA Sepolia ETH가 없습니다. 테스트 ETH를 받은 뒤 최신
+                  상태를 조회해 주세요.
+                </p>
+                <p v-else class="faucet-status available" role="status">
+                  <Check :size="17" aria-hidden="true" />
+                  이 지갑은 데모 mKRW를 충전할 수 있습니다. 충전 후 상환 준비 상태를 자동으로
+                  다시 확인합니다.
+                </p>
+
+                <div class="faucet-actions">
+                  <button
+                    v-if="faucetReadiness.canClaim && !faucetClaimUncertain"
+                    type="button"
+                    :disabled="!canClaimDemoMkrw"
+                    @click="receiveDemoMkrw"
+                  >
+                    <Coins :size="16" aria-hidden="true" />
+                    MetaMask로 {{ formatMkrw(faucetReadiness.claimAmount) }} 받기
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary"
+                    :disabled="isActionRunning || isFaucetLoading"
+                    @click="refreshSelectedReadiness"
+                  >
+                    <RefreshCw :size="16" aria-hidden="true" />
+                    충전 상태 다시 조회
+                  </button>
+                </div>
+
+                <p class="gas-note">
+                  수령·승인·상환에는 GIWA Sepolia ETH가 필요합니다.
+                  <a
+                    href="https://docs.giwa.io/get-started/faucets"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    테스트 ETH 받는 방법
+                    <ExternalLink :size="14" aria-hidden="true" />
+                  </a>
+                </p>
+              </template>
+            </section>
 
             <ol class="workflow-timeline" aria-label="상환 진행 단계">
               <li
@@ -1258,21 +1524,146 @@ button:disabled {
   line-height: 1.55;
 }
 
-.insufficient {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-1, 8px);
-  margin: 0;
-  border-left: 3px solid #c24141;
-  padding: 8px 0 8px 16px;
-  color: #941f1f;
+.recipient-notice > svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.faucet-card {
+  display: grid;
+  gap: var(--space-2, 16px);
+  border: 1px solid #fde68a;
+  border-left: 3px solid #a16207;
+  border-radius: var(--radius-md, 8px);
+  padding: 16px;
+  background: #fffbeb;
+  color: var(--color-text, #17221d);
   line-height: 1.55;
 }
 
-.recipient-notice > svg,
-.insufficient > svg {
+.faucet-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.faucet-heading h3,
+.faucet-intro,
+.faucet-status,
+.gas-note {
+  margin: 0;
+}
+
+.faucet-heading .callout-heading,
+.faucet-heading h3 {
+  color: #854d0e;
+}
+
+.demo-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 8px;
+  background: #fef3c7;
+  color: #854d0e;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.faucet-intro {
+  color: var(--color-text, #17221d);
+}
+
+.faucet-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid #fde68a;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface, #ffffff);
+}
+
+.faucet-stats div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.faucet-stats div + div {
+  border-left: 1px solid #fde68a;
+}
+
+.faucet-stats span {
+  color: var(--color-text-muted, #66736d);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.faucet-stats strong {
+  color: var(--color-text, #17221d);
+  font-variant-numeric: tabular-nums;
+}
+
+.faucet-status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1, 8px);
+  border-radius: var(--radius-md, 8px);
+  padding: 12px;
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #17221d);
+}
+
+.faucet-status svg,
+.gas-note svg {
   flex: 0 0 auto;
-  margin-top: 3px;
+}
+
+.faucet-status.error {
+  border: 1px solid #efb4b4;
+  background: #fff2f2;
+  color: #941f1f;
+}
+
+.faucet-status.warning {
+  border: 1px solid #fde68a;
+  color: #854d0e;
+}
+
+.faucet-status.available {
+  border: 1px solid #b8d8ca;
+  background: var(--color-brand-soft, #eff8f4);
+  color: var(--color-brand, #0b7654);
+}
+
+.faucet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1, 8px);
+}
+
+.gas-note {
+  color: var(--color-text-muted, #66736d);
+  font-size: 13px;
+}
+
+.gas-note a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  color: var(--color-brand, #0b7654);
+  font-weight: 650;
+  text-underline-offset: 3px;
+}
+
+.gas-note a:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--color-brand, #0b7654);
+  outline-offset: 2px;
 }
 
 .workflow-timeline {
@@ -1442,6 +1833,15 @@ button:disabled {
   .terms {
     grid-template-columns: 1fr;
   }
+
+  .faucet-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .faucet-stats div + div {
+    border-top: 1px solid #fde68a;
+    border-left: 0;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1481,7 +1881,8 @@ button:disabled {
 
   .workflow-content button,
   .journal-gate button,
-  .recovery-card button {
+  .recovery-card button,
+  .faucet-actions button {
     width: 100%;
   }
 }

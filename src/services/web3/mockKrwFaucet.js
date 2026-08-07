@@ -122,7 +122,7 @@ function normalizeFaucetError(error) {
   if (customError?.name === 'AlreadyClaimed') {
     return new Web3Error(
       'FAUCET_ALREADY_CLAIMED',
-      '이 Funder 지갑은 데모 mKRW를 이미 한 번 받았습니다. 최신 잔액을 조회해 주세요.',
+      '이 회사 지갑은 데모 mKRW를 이미 한 번 받았습니다. 최신 잔액을 조회해 주세요.',
     )
   }
   if (customError?.name === 'FaucetDepleted') {
@@ -134,10 +134,10 @@ function normalizeFaucetError(error) {
   return normalizeWeb3Error(error)
 }
 
-async function faucetState(provider, funderWalletAddress, requiredAmount = null) {
+async function faucetState(provider, companyWalletAddress, requiredAmount = null) {
   const address = faucetAddress()
   const tokenAddress = paymentTokenAddress()
-  const funder = walletAddress(funderWalletAddress)
+  const companyWallet = walletAddress(companyWalletAddress)
   const faucet = new Contract(address, mockKrwFaucetAbi, provider)
   const paymentToken = new Contract(tokenAddress, mockKrwAbi, provider)
 
@@ -163,16 +163,16 @@ async function faucetState(provider, funderWalletAddress, requiredAmount = null)
     claimAmount,
     hasClaimed,
     faucetBalance,
-    funderBalance,
+    companyWalletBalance,
     nativeBalance,
     decimals,
   ] = await Promise.all([
     faucet.paymentToken(),
     faucet.claimAmount(),
-    faucet.hasClaimed(funder),
+    faucet.hasClaimed(companyWallet),
     paymentToken.balanceOf(address),
-    paymentToken.balanceOf(funder),
-    provider.getBalance(funder),
+    paymentToken.balanceOf(companyWallet),
+    provider.getBalance(companyWallet),
     paymentToken.decimals(),
   ])
 
@@ -195,16 +195,15 @@ async function faucetState(provider, funderWalletAddress, requiredAmount = null)
     )
   }
 
-  const required =
-    requiredAmount == null ? null : positiveInteger(requiredAmount, '펀딩 요청 금액')
+  const required = requiredAmount == null ? null : positiveInteger(requiredAmount, '필요 금액')
   const hasInventory = faucetBalance >= claimAmount
   const willCoverRequiredAmount =
-    required == null || funderBalance + claimAmount >= required
+    required == null || companyWalletBalance + claimAmount >= required
   let estimatedGasCost = null
   if (!hasClaimed && hasInventory && willCoverRequiredAmount) {
     try {
       const [gasLimit, feeData] = await Promise.all([
-        faucet.claim.estimateGas({ from: funder }),
+        faucet.claim.estimateGas({ from: companyWallet }),
         provider.getFeeData(),
       ])
       const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice
@@ -219,11 +218,11 @@ async function faucetState(provider, funderWalletAddress, requiredAmount = null)
   return {
     address,
     tokenAddress,
-    funder,
+    companyWallet,
     claimAmount,
     hasClaimed,
     faucetBalance,
-    funderBalance,
+    companyWalletBalance,
     nativeBalance,
     estimatedGasCost,
     requiredAmount: required,
@@ -294,12 +293,12 @@ function verifyClaimReceipt(receipt, state, txHash) {
   if (
     claimedEvents.length !== 1 ||
     !claimedEvent ||
-    getAddress(claimedEvent.args.account) !== state.funder ||
+    getAddress(claimedEvent.args.account) !== state.companyWallet ||
     claimedEvent.args.amount !== state.claimAmount ||
     transferEvents.length !== 1 ||
     !transferEvent ||
     getAddress(transferEvent.args.from) !== state.address ||
-    getAddress(transferEvent.args.to) !== state.funder ||
+    getAddress(transferEvent.args.to) !== state.companyWallet ||
     transferEvent.args.value !== state.claimAmount
   ) {
     throw new Web3Error(
@@ -316,19 +315,19 @@ function verifyClaimReceipt(receipt, state, txHash) {
 }
 
 export async function getMockKrwFaucetReadiness(
-  funderWalletAddress,
+  companyWalletAddress,
   requiredAmount = null,
 ) {
   try {
     const provider = await configuredReadProvider()
-    const state = await faucetState(provider, funderWalletAddress, requiredAmount)
+    const state = await faucetState(provider, companyWalletAddress, requiredAmount)
     return {
       faucetAddress: state.address,
       paymentTokenAddress: state.tokenAddress,
-      funderWalletAddress: state.funder,
+      walletAddress: state.companyWallet,
       claimAmount: state.claimAmount.toString(),
       faucetBalance: state.faucetBalance.toString(),
-      walletBalance: state.funderBalance.toString(),
+      walletBalance: state.companyWalletBalance.toString(),
       nativeBalance: state.nativeBalance.toString(),
       estimatedGasCost: state.estimatedGasCost?.toString() ?? null,
       hasClaimed: state.hasClaimed,
@@ -343,17 +342,17 @@ export async function getMockKrwFaucetReadiness(
 }
 
 export async function claimDemoMkrw(
-  funderWalletAddress,
+  companyWalletAddress,
   requiredAmount = null,
   onSubmitted = null,
 ) {
   try {
-    const { provider, signer } = await getGiwaSigner(funderWalletAddress)
-    const state = await faucetState(provider, funderWalletAddress, requiredAmount)
+    const { provider, signer } = await getGiwaSigner(companyWalletAddress)
+    const state = await faucetState(provider, companyWalletAddress, requiredAmount)
     if (state.hasClaimed) {
       throw new Web3Error(
         'FAUCET_ALREADY_CLAIMED',
-        '이 Funder 지갑은 데모 mKRW를 이미 한 번 받았습니다. 최신 잔액을 조회해 주세요.',
+        '이 회사 지갑은 데모 mKRW를 이미 한 번 받았습니다. 최신 잔액을 조회해 주세요.',
       )
     }
     if (!state.hasInventory) {
@@ -365,7 +364,7 @@ export async function claimDemoMkrw(
     if (!state.willCoverRequiredAmount) {
       throw new Web3Error(
         'FAUCET_CLAIM_AMOUNT_INSUFFICIENT',
-        '1회 데모 충전 후에도 선택한 채권의 펀딩 금액이 부족하여 충전을 진행하지 않았습니다.',
+        '1회 데모 충전 후에도 선택한 채권의 필요 금액이 부족하여 충전을 진행하지 않았습니다.',
       )
     }
     if (!state.hasNativeGas) {
@@ -384,7 +383,7 @@ export async function claimDemoMkrw(
           txHash: transaction.hash,
           nonce: transaction.nonce,
           faucetAddress: state.address,
-          funderWalletAddress: state.funder,
+          walletAddress: state.companyWallet,
           claimAmount: state.claimAmount.toString(),
         })
       } catch {
@@ -404,7 +403,7 @@ export async function claimDemoMkrw(
 
     let walletBalance = null
     try {
-      walletBalance = await paymentToken.balanceOf(state.funder)
+      walletBalance = await paymentToken.balanceOf(state.companyWallet)
     } catch {
       // A successful receipt and exact events remain authoritative during RPC lag.
     }
@@ -420,7 +419,7 @@ export async function claimDemoMkrw(
 
 export async function inspectMockKrwFaucetClaim(
   txHash,
-  funderWalletAddress,
+  companyWalletAddress,
   requiredAmount = null,
   nonce = null,
 ) {
@@ -433,7 +432,7 @@ export async function inspectMockKrwFaucetClaim(
     }
 
     const provider = await configuredReadProvider()
-    const state = await faucetState(provider, funderWalletAddress, requiredAmount)
+    const state = await faucetState(provider, companyWalletAddress, requiredAmount)
     const receipt = await provider.getTransactionReceipt(txHash)
     if (receipt) {
       if (receipt.status !== 1) {
@@ -453,8 +452,8 @@ export async function inspectMockKrwFaucetClaim(
     ) {
       const blockNumber = await provider.getBlockNumber()
       const [nonceAtBlock, hasClaimedAtBlock] = await Promise.all([
-        provider.getTransactionCount(state.funder, blockNumber),
-        state.faucet.hasClaimed(state.funder, { blockTag: blockNumber }),
+        provider.getTransactionCount(state.companyWallet, blockNumber),
+        state.faucet.hasClaimed(state.companyWallet, { blockTag: blockNumber }),
       ])
       if (nonceAtBlock > nonce) {
         return {
